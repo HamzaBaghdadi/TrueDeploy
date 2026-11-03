@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { api, type Server, type ServerInfo } from "@/lib/api";
 import { AddServerForm } from "@/components/add-server-form";
 import { ServerInfoPanel } from "@/components/server-info";
+import { ServerSetup } from "@/components/server-setup";
+import { useConfirm } from "@/components/confirm-dialog";
 
 type Check = { busy: boolean; info?: ServerInfo; error?: string };
 
@@ -11,7 +13,9 @@ export default function ServersPage() {
   const [servers, setServers] = useState<Server[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [settingUp, setSettingUp] = useState<Server | null>(null);
   const [checks, setChecks] = useState<Record<string, Check>>({});
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     try {
@@ -38,10 +42,18 @@ export default function ServersPage() {
   }
 
   async function remove(s: Server) {
-    if (!confirm(`Remove "${s.name}"? Its saved credentials will be deleted.`)) return;
+    const ok = await confirm({
+      title: `Remove ${s.name}?`,
+      message: "The server and its saved credentials will be deleted from this computer. Nothing on the server changes.",
+      confirmLabel: "Remove server",
+      tone: "danger",
+    });
+    if (!ok) return;
     await api.deleteServer(s.id);
     void load();
   }
+
+  if (settingUp) return <ServerSetup server={settingUp} onBack={() => setSettingUp(null)} />;
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
@@ -101,6 +113,12 @@ export default function ServersPage() {
                       {s.user}@{s.host}:{s.port} · {s.auth === "key" ? "SSH key" : "password"}
                     </div>
                   </div>
+                  <button
+                    onClick={() => setSettingUp(s)}
+                    className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-accent-ink"
+                  >
+                    Set up
+                  </button>
                   <button
                     onClick={() => check(s.id)}
                     disabled={c?.busy}

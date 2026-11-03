@@ -46,6 +46,18 @@ textarea,
   user-select: text;
 }
 
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+}
+
 ::-webkit-scrollbar {
   width: 10px;
 }

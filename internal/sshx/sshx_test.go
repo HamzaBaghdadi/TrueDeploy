@@ -1,6 +1,7 @@
 package sshx
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
@@ -103,6 +104,27 @@ func TestPasswordAuthAndRun(t *testing.T) {
 	out, err := c.Run("uname -r")
 	if err != nil || out != "ran: uname -r" {
 		t.Fatalf("Run = %q, %v", out, err)
+	}
+}
+
+func TestStreamDeliversLines(t *testing.T) {
+	host, port, _ := startServer(t, nil)
+	c, err := Dial(Target{Host: host, Port: port, User: "root", Auth: AuthPassword, Password: "secret"}, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for i := 0; i < 20; i++ {
+		var lines []string
+		err := c.Stream(context.Background(), "apt-get update", "", func(stream, line string) {
+			lines = append(lines, stream+":"+line)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(lines) != 1 || lines[0] != "stdout:ran: apt-get update" {
+			t.Fatalf("lines = %q", lines)
+		}
 	}
 }
 

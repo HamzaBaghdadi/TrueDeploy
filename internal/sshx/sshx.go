@@ -4,11 +4,16 @@
 package sshx
 
 import (
+	"bufio"
+	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -124,6 +129,66 @@ func authMethods(t Target) ([]ssh.AuthMethod, error) {
 		return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
 	}
 	return nil, fmt.Errorf("unknown auth method %q", t.Auth)
+}
+
+// Stream runs cmd, writes stdin (if any) to it, and calls onLine for every
+// output line as it arrives. Cancelling ctx closes the session.
+func (c *Client) Stream(ctx context.Context, cmd, stdin string, onLine func(stream, line string)) error {
+	s, err := c.NewSession()
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	stdout, err := s.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	stderr, err := s.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if stdin != "" {
+		s.Stdin = strings.NewReader(stdin)
+	}
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	pump := func(name string, r io.Reader) {
+		defer wg.Done()
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 64*1024), 1024*1024)
+		for sc.Scan() {
+			mu.Lock()
+			onLine(name, sc.Text())
+			mu.Unlock()
+		}
+	}
+	wg.Add(2)
+	go pump("stdout", stdout)
+	go pump("stderr", stderr)
+
+	if err := s.Start(cmd); err != nil {
+		return err
+	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = s.Signal(ssh.SIGTERM)
+			_ = s.Close()
+		case <-done:
+		}
+	}()
+
+	wg.Wait()
+	err = s.Wait()
+	close(done)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 // Run executes a command and returns combined stdout/stderr.

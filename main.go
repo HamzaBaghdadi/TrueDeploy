@@ -6,6 +6,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"truedeploy/internal/store"
 	"truedeploy/services"
 )
 
@@ -15,7 +16,7 @@ import (
 var assets embed.FS
 
 func main() {
-	servers, err := services.NewServerService()
+	st, err := store.Open()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -24,7 +25,8 @@ func main() {
 		Name:        "TrueDeploy",
 		Description: "Set up servers, repos and Docker deployments over SSH",
 		Services: []application.Service{
-			application.NewService(servers),
+			application.NewService(services.NewServerService(st)),
+			application.NewService(services.NewSetupService(st)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

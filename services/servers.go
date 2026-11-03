@@ -41,12 +41,8 @@ type ServerService struct {
 	store *store.Store
 }
 
-func NewServerService() (*ServerService, error) {
-	st, err := store.Open()
-	if err != nil {
-		return nil, err
-	}
-	return &ServerService{store: st}, nil
+func NewServerService(st *store.Store) *ServerService {
+	return &ServerService{store: st}
 }
 
 // TestConnection connects with the given details without saving anything.
@@ -109,11 +105,20 @@ func (s *ServerService) DeleteServer(id string) error {
 
 // TestSavedServer reconnects to a saved server, enforcing its pinned host key.
 func (s *ServerService) TestSavedServer(id string) (*ServerInfo, error) {
-	srv, sec, err := s.store.Get(id)
+	t, _, err := savedTarget(s.store, id)
 	if err != nil {
 		return nil, err
 	}
-	return probe(sshx.Target{
+	return probe(t)
+}
+
+// savedTarget builds connection details for a saved server, with its pinned host key.
+func savedTarget(st *store.Store, id string) (sshx.Target, store.Server, error) {
+	srv, sec, err := st.Get(id)
+	if err != nil {
+		return sshx.Target{}, store.Server{}, err
+	}
+	return sshx.Target{
 		Host:               srv.Host,
 		Port:               srv.Port,
 		User:               srv.User,
@@ -123,7 +128,7 @@ func (s *ServerService) TestSavedServer(id string) (*ServerInfo, error) {
 		KeyPath:            srv.KeyPath,
 		Passphrase:         sec.Passphrase,
 		HostKeyFingerprint: srv.HostKeyFingerprint,
-	})
+	}, srv, nil
 }
 
 // probeScript prints key=value lines so parsing doesn't depend on the distro.

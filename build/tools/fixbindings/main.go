@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-var relJS = regexp.MustCompile(`(from\s+["'])(\.{1,2}/[^"']+)\.js(["'])`)
+// Matches `from "./x.js"` and side-effect `import "./x.js"`.
+var relJS = regexp.MustCompile(`((?:from|import)\s+["'])(\.{1,2}/[^"']+)\.js(["'])`)
 
 func main() {
 	dir := "frontend/bindings"
