@@ -1,0 +1,7 @@
+# Keep LF everywhere so shell scripts and Linux/macOS builds work from a Windows checkout.
+* text=auto eol=lf
+
+*.png binary
+*.ico binary
+*.icns binary
+*.car binary

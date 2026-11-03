@@ -1,0 +1,10 @@
+bin/
+build/bin/
+frontend/out/
+frontend/.next/
+frontend/node_modules/
+frontend/bindings/
+.task/
+*.exe
+*.syso
+.DS_Store
