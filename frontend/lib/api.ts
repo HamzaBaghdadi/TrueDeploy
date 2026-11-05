@@ -1,9 +1,16 @@
 // Thin wrapper over the Wails-generated bindings, so the rest of the UI
 // doesn't depend on generated paths. Regenerate with `wails3 generate bindings`.
-import { Events } from "@wailsio/runtime";
+import { Browser, Events } from "@wailsio/runtime";
 import {
+  ProjectService,
   ServerService,
   SetupService,
+  type ContainerStatus,
+  type DeployFinished,
+  type DeployLog,
+  type ProjectDetail,
+  type ProjectInput,
+  type ProjectView,
   type ServerInfo,
   type ServerInput,
   type SetupFinished,
@@ -13,11 +20,24 @@ import {
   type SetupStepEvent,
   type StepView,
 } from "@/bindings/truedeploy/services";
-import * as SetupEvents from "@/bindings/events";
+import * as AppEvents from "@/bindings/events";
 import type { Target as GoTarget } from "@/bindings/truedeploy/internal/sshx";
-import type { Server as GoServer } from "@/bindings/truedeploy/internal/store";
+import type { Deployment, Server as GoServer } from "@/bindings/truedeploy/internal/store";
 
-export type { ServerInfo, SetupFinished, SetupLog, SetupOptions, SetupPlan, SetupStepEvent, StepView };
+export type {
+  ContainerStatus,
+  Deployment,
+  ProjectDetail,
+  ProjectInput,
+  ProjectView,
+  ServerInfo,
+  SetupFinished,
+  SetupLog,
+  SetupOptions,
+  SetupPlan,
+  SetupStepEvent,
+  StepView,
+};
 
 // Go's AuthMethod is generated as a TS enum; the UI uses the plain string values.
 export type AuthMethod = "password" | "key";
@@ -50,7 +70,32 @@ export const api = {
   runSetup: (serverId: string, stepIds: string[], opts: SetupOptions) =>
     call(SetupService.Run(serverId, stepIds, opts)),
   cancelSetup: (runId: string) => call(SetupService.Cancel(runId)),
+
+  listProjects: async () => (await call(ProjectService.ListProjects())) ?? [],
+  getProject: (id: string) => call(ProjectService.GetProject(id)).then(required),
+  saveProject: (p: ProjectInput) => call(ProjectService.SaveProject(p)).then(required),
+  deleteProject: (id: string) => call(ProjectService.DeleteProject(id)),
+  deployKey: (serverId: string) => call(ProjectService.DeployKey(serverId)),
+  checkRepoAccess: (projectId: string) => call(ProjectService.CheckRepoAccess(projectId)),
+  deploy: (projectId: string) => call(ProjectService.Deploy(projectId)),
+  cancelDeploy: (deploymentId: string) => call(ProjectService.CancelDeploy(deploymentId)),
+  projectStatus: async (projectId: string) => (await call(ProjectService.Status(projectId))) ?? [],
+  stopProject: (projectId: string) => call(ProjectService.StopProject(projectId)),
+
+  // Opens in the system browser, not inside the app window.
+  openURL: (url: string) => Browser.OpenURL(url),
 };
+
+export function onDeployEvents(handlers: {
+  log: (e: DeployLog) => void;
+  finished: (e: DeployFinished) => void;
+}): () => void {
+  const offs = [
+    Events.On(AppEvents.DeployLog, (ev) => handlers.log(ev.data as DeployLog)),
+    Events.On(AppEvents.DeployFinished, (ev) => handlers.finished(ev.data as DeployFinished)),
+  ];
+  return () => offs.forEach((off) => off());
+}
 
 // Subscribe to setup progress events. Returns an unsubscribe function.
 export function onSetupEvents(handlers: {
@@ -59,9 +104,9 @@ export function onSetupEvents(handlers: {
   finished: (e: SetupFinished) => void;
 }): () => void {
   const offs = [
-    Events.On(SetupEvents.SetupLog, (ev) => handlers.log(ev.data as SetupLog)),
-    Events.On(SetupEvents.SetupStep, (ev) => handlers.step(ev.data as SetupStepEvent)),
-    Events.On(SetupEvents.SetupFinished, (ev) => handlers.finished(ev.data as SetupFinished)),
+    Events.On(AppEvents.SetupLog, (ev) => handlers.log(ev.data as SetupLog)),
+    Events.On(AppEvents.SetupStep, (ev) => handlers.step(ev.data as SetupStepEvent)),
+    Events.On(AppEvents.SetupFinished, (ev) => handlers.finished(ev.data as SetupFinished)),
   ];
   return () => offs.forEach((off) => off());
 }

@@ -150,26 +150,36 @@ func (s *Store) readServers() (map[string]Server, error) {
 
 func (s *Store) readSecrets() (map[string]Secrets, error) {
 	m := map[string]Secrets{}
-	raw, err := os.ReadFile(s.path("secrets.json"))
-	if errors.Is(err, fs.ErrNotExist) {
-		return m, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var blob string
-	if err := json.Unmarshal(raw, &blob); err != nil {
-		return nil, err
-	}
-	plain, err := s.decrypt(blob)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt secrets: %w", err)
-	}
-	return m, json.Unmarshal(plain, &m)
+	return m, s.readEncrypted("secrets.json", &m)
 }
 
 func (s *Store) writeSecrets(m map[string]Secrets) error {
-	plain, err := json.Marshal(m)
+	return s.writeEncrypted("secrets.json", m)
+}
+
+// readEncrypted decrypts a JSON file written by writeEncrypted into v.
+// A missing file leaves v unchanged.
+func (s *Store) readEncrypted(name string, v any) error {
+	raw, err := os.ReadFile(s.path(name))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	var blob string
+	if err := json.Unmarshal(raw, &blob); err != nil {
+		return err
+	}
+	plain, err := s.decrypt(blob)
+	if err != nil {
+		return fmt.Errorf("decrypt %s: %w", name, err)
+	}
+	return json.Unmarshal(plain, v)
+}
+
+func (s *Store) writeEncrypted(name string, v any) error {
+	plain, err := json.Marshal(v)
 	if err != nil {
 		return err
 	}
@@ -177,9 +187,8 @@ func (s *Store) writeSecrets(m map[string]Secrets) error {
 	if err != nil {
 		return err
 	}
-	return writeJSON(s.path("secrets.json"), blob)
+	return writeJSON(s.path(name), blob)
 }
-
 func masterKey() ([]byte, error) {
 	enc, err := keyring.Get(appName, keyringAccount)
 	if errors.Is(err, keyring.ErrNotFound) {

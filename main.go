@@ -27,6 +27,7 @@ func main() {
 		Services: []application.Service{
 			application.NewService(services.NewServerService(st)),
 			application.NewService(services.NewSetupService(st)),
+			application.NewService(services.NewProjectService(st)),
 		},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),

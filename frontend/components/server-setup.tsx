@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onSetupEvents, type Server, type SetupOptions, type SetupPlan, type StepView } from "@/lib/api";
 import { useConfirm } from "@/components/confirm-dialog";
+import { LogConsole } from "@/components/log-console";
 
 type StepStatus = { status: "running" | "done" | "failed" | "cancelled"; error?: string; durationMs?: number };
 type LogLine = { stepId: string; stream: string; line: string };
@@ -372,7 +373,18 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
         </>
       )}
 
-      {(logs.length > 0 || busy) && <LogConsole logs={logs} steps={steps} running={busy} />}
+      {(logs.length > 0 || busy) && (
+        <div className="mt-6">
+          <LogConsole
+            running={busy}
+            entries={logs.map((l) => ({
+              line: l.line,
+              stream: l.stream,
+              section: steps.find((s) => s.id === l.stepId)?.title ?? l.stepId,
+            }))}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -555,44 +567,4 @@ function RunSummary({ run, error }: { run: RunState; error: string | null }) {
   if (run === "cancelled") return <span className="text-sm text-warning">Cancelled.</span>;
   if (run === "failed") return <span className="selectable text-sm text-danger">{error ?? "Setup failed."}</span>;
   return null;
-}
-
-function LogConsole({ logs, steps, running }: { logs: LogLine[]; steps: StepView[]; running: boolean }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const stick = useRef(true);
-  const titles = Object.fromEntries(steps.map((s) => [s.id, s.title]));
-
-  // Follow new output unless the user scrolled up to read.
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [logs]);
-
-  return (
-    <div className="mt-6 overflow-hidden rounded-lg border border-border">
-      <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
-        <span className="text-xs font-medium text-muted">Output</span>
-        {running && <span className="size-2 animate-pulse rounded-full bg-accent" />}
-      </div>
-      <div
-        ref={ref}
-        onScroll={(e) => {
-          const el = e.currentTarget;
-          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-        }}
-        className="selectable h-80 overflow-auto bg-[#07090b] p-3 font-mono text-[12px] leading-relaxed"
-      >
-        {logs.map((l, i) => (
-          <div key={i}>
-            {(i === 0 || logs[i - 1].stepId !== l.stepId) && (
-              <div className="mt-2 mb-1 font-semibold text-accent first:mt-0">▶ {titles[l.stepId] ?? l.stepId}</div>
-            )}
-            <div className={`whitespace-pre-wrap break-all ${l.stream === "stderr" ? "text-foreground/60" : "text-foreground/90"}`}>
-              {l.line || " "}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
