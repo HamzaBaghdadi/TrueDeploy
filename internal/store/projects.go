@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"time"
+	"truedeploy/internal/jobs"
 )
 
 // Project links a Git repository to a server and says how to run it.
@@ -21,10 +22,66 @@ type Project struct {
 	// ComposeFile is optional; empty means compose.yaml / docker-compose.yml auto-detection.
 	ComposeFile string `json:"composeFile,omitempty"`
 	// HostPort/ContainerPort are used by the dockerfile runtime ("8080:3000").
-	HostPort      int       `json:"hostPort,omitempty"`
-	ContainerPort int       `json:"containerPort,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
+	HostPort      int `json:"hostPort,omitempty"`
+	ContainerPort int `json:"containerPort,omitempty"`
+	// Folder is the folder to build inside the repository (monorepos); "" is the root.
+	Folder string `json:"folder,omitempty"`
+	// Preset generates the Dockerfile (and nginx config) for a framework when
+	// the repository has none. PresetOptions are its settings.
+	Preset        string            `json:"preset,omitempty"`
+	PresetOptions map[string]string `json:"presetOptions,omitempty"`
+	// Domains are served over HTTPS by the server's proxy, forwarding to
+	// localhost:AppPort (compose) or localhost:HostPort (dockerfile).
+	Domains []string `json:"domains,omitempty"`
+	// Redirects are hosts (www.example.com) that redirect to the first domain.
+	Redirects []string `json:"redirects,omitempty"`
+	AppPort   int      `json:"appPort,omitempty"`
+	// StripPath removes a route's path prefix (example.com/api) before
+	// forwarding, so the app sees /users instead of /api/users.
+	StripPath bool `json:"stripPath,omitempty"`
+	// Health check after each deploy (on unless NoHealthCheck), and rollback
+	// to the last healthy commit when it fails.
+	NoHealthCheck bool   `json:"noHealthCheck,omitempty"`
+	HealthPath    string `json:"healthPath,omitempty"`
+	HealthTimeout int    `json:"healthTimeout,omitempty"`
+	AutoRollback  bool   `json:"autoRollback,omitempty"`
+	// MemoryMB and CPUs limit each of the project's containers (0 = no limit).
+	MemoryMB int     `json:"memoryMb,omitempty"`
+	CPUs     float64 `json:"cpus,omitempty"`
+	// AutoDeploy: GitHub Actions deploys on every push. AutoDeployStale is set
+	// when settings the hook depends on change, until it is set up again.
+	// Links inject managed databases' URLs into the environment on deploy.
+	Links           []DBLink `json:"links,omitempty"`
+	AutoDeploy      bool     `json:"autoDeploy,omitempty"`
+	AutoDeployStale bool     `json:"autoDeployStale,omitempty"`
+	// Backups is the volume backup schedule (nil: never set).
+	Backups *BackupSchedule `json:"backups,omitempty"`
+	// Jobs are scheduled commands run with cron inside the app's container.
+	Jobs []jobs.Job `json:"jobs,omitempty"`
+	// PreviewOf is the project this one previews a branch of ("" for normal
+	// projects). PreviewDomain (on the main project) is the base domain
+	// previews get a subdomain of, e.g. preview.example.com.
+	PreviewOf     string `json:"previewOf,omitempty"`
+	PreviewDomain string `json:"previewDomain,omitempty"`
+	// Access: a password in front of the project's domains (bcrypt hash only),
+	// and maintenance mode (a "back soon" page instead of the app).
+	AuthUser           string `json:"authUser,omitempty"`
+	AuthHash           string `json:"authHash,omitempty"`
+	Maintenance        bool   `json:"maintenance,omitempty"`
+	MaintenanceMessage string `json:"maintenanceMessage,omitempty"`
+	// EnvGroups are shared variable groups, applied before the project's own
+	// variables (which win on conflicts).
+	EnvGroups []string  `json:"envGroups,omitempty"`
+	CreatedAt time.Time `json:"createdAt"`
+	// Template is set for one-click apps (the catalog ID). They have no
+	// repository: Compose holds their compose file, copied at creation so
+	// catalog updates never change a running app behind the user's back.
+	Template string `json:"template,omitempty"`
+	Compose  string `json:"compose,omitempty"`
 }
+
+// IsApp reports whether the project is a one-click app (no Git repository).
+func (p Project) IsApp() bool { return p.Compose != "" }
 
 // Deployment is one deploy attempt of a project.
 type Deployment struct {
@@ -33,10 +90,17 @@ type Deployment struct {
 	StartedAt  time.Time `json:"startedAt"`
 	FinishedAt time.Time `json:"finishedAt,omitempty"`
 	// Status is "running", "success", "failed" or "cancelled".
-	Status  string `json:"status"`
-	Commit  string `json:"commit,omitempty"`  // short SHA
-	Message string `json:"message,omitempty"` // commit subject
-	Error   string `json:"error,omitempty"`
+	Status string `json:"status"`
+	Commit string `json:"commit,omitempty"` // short SHA
+	SHA    string `json:"sha,omitempty"`    // full SHA, needed for rollbacks
+	// RollbackOf is the deployment whose commit this one redeployed.
+	RollbackOf string `json:"rollbackOf,omitempty"`
+	Message    string `json:"message,omitempty"` // commit subject
+	// Unhealthy is why the post-deploy health check failed; RolledBackTo is
+	// the commit the server went back to automatically.
+	Unhealthy    string `json:"unhealthy,omitempty"`
+	RolledBackTo string `json:"rolledBackTo,omitempty"`
+	Error        string `json:"error,omitempty"`
 	// Log keeps the last lines of output for the history view.
 	Log []string `json:"log,omitempty"`
 }

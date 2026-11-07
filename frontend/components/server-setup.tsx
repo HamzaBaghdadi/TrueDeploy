@@ -1,9 +1,36 @@
 "use client";
 
+import {
+  ChevronDown,
+  ChevronRight,
+  CircleCheck,
+  CircleX,
+  Code,
+  Loader2,
+  LockOpen,
+  Minus,
+  Play,
+  RefreshCw,
+  ShieldAlert,
+  Square,
+  TriangleAlert,
+} from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, onSetupEvents, type Server, type SetupOptions, type SetupPlan, type StepView } from "@/lib/api";
 import { useConfirm } from "@/components/confirm-dialog";
+import { markSetupDone } from "@/components/getting-started";
 import { LogConsole } from "@/components/log-console";
+import { BackButton } from "@/components/back-button";
+import { CopyButton } from "@/components/copy-button";
+import { Notice } from "@/components/notice";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { cn } from "@/lib/utils";
 
 type StepStatus = { status: "running" | "done" | "failed" | "cancelled"; error?: string; durationMs?: number };
 type LogLine = { stepId: string; stream: string; line: string };
@@ -11,8 +38,6 @@ type RunState = "idle" | "starting" | "running" | "done" | "failed" | "cancelled
 type Mode = "login" | "create";
 
 const MAX_LOG_LINES = 5000;
-const input =
-  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted/60 focus:border-accent disabled:opacity-50";
 
 export function ServerSetup({ server, onBack }: { server: Server; onBack: () => void }) {
   const confirm = useConfirm();
@@ -104,6 +129,7 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
       finished: (e) => {
         if (!mine(e.runId)) return;
         setRun(e.status as RunState);
+        if (e.status === "done") markSetupDone();
         setRunError(e.error ?? null);
         runId.current = null;
         setScanning(true);
@@ -170,36 +196,38 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-8">
-      <button onClick={onBack} disabled={busy} className="mb-4 text-sm text-muted hover:text-foreground disabled:opacity-40">
-        ← Servers
-      </button>
+      <BackButton label="Servers" onClick={onBack} disabled={busy} />
       <header className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Set up {server.name}</h1>
-          <p className="selectable mt-1 font-mono text-xs text-muted">
+          <p className="selectable mt-1 font-mono text-xs text-muted-foreground">
             {server.user}@{server.host}
             {plan && ` · ${plan.os}`}
           </p>
         </div>
-        <button
-          onClick={() => rescan()}
-          disabled={locked}
-          className="rounded-md border border-border px-3 py-1.5 text-sm hover:border-accent disabled:opacity-50"
-        >
+        <Button variant="outline" onClick={() => rescan()} disabled={locked}>
+          <RefreshCw className={scanning ? "animate-spin" : ""} />
           {scanning ? "Scanning…" : "Rescan"}
-        </button>
+        </Button>
       </header>
 
-      {error && <p className="selectable mb-4 rounded-md bg-danger/10 p-3 text-sm text-danger">{error}</p>}
+      {error && (
+        <Notice tone="error" className="mb-4">
+          {error}
+        </Notice>
+      )}
 
       {!plan && scanning && (
-        <p className="text-sm text-muted">Connecting to {server.host} and checking what this account can do…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Connecting to {server.host} and checking what this account can do…
+        </p>
       )}
 
       {plan && facts && (
         <>
           {/* What this account can do */}
-          <section className="mb-4 rounded-lg border border-border bg-surface">
+          <Card className="mb-4 gap-0 py-0">
             <div className="grid divide-y divide-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <Fact label="Logged in as" value={facts.loginUser} />
               <Fact
@@ -233,22 +261,22 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
             </div>
 
             {(access === "none" || plan.needsSudoPassword || plan.sudoError || showSudoField) && (
-              <div className="border-t border-border p-4 text-sm">
+              <div className="space-y-3 border-t border-border p-4 text-sm">
                 {access === "none" && !showSudoField && (
-                  <p className="text-muted">
+                  <p className="text-muted-foreground">
                     <span className="text-foreground">{facts.loginUser}</span> has no admin rights, so server-wide steps
                     are disabled. TrueDeploy can still prepare this account for deployments.{" "}
-                    <button className="text-accent" onClick={() => setShowSudoField(true)}>
+                    <Button variant="link" size="xs" className="h-auto px-0" onClick={() => setShowSudoField(true)}>
                       This account has sudo?
-                    </button>
+                    </Button>
                   </p>
                 )}
                 {(plan.needsSudoPassword || showSudoField || plan.sudoError) && (
                   <div className="flex flex-wrap items-end gap-3">
-                    <div className="min-w-60 flex-1">
-                      <label className="mb-1.5 block text-xs font-medium text-muted">Sudo password for {facts.loginUser}</label>
-                      <input
-                        className={input}
+                    <div className="min-w-60 flex-1 space-y-1.5">
+                      <Label htmlFor="sudo-pw">Sudo password for {facts.loginUser}</Label>
+                      <Input
+                        id="sudo-pw"
                         type="password"
                         value={sudoPassword}
                         onChange={(e) => setSudoPassword(e.target.value)}
@@ -257,32 +285,35 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
                         autoFocus={showSudoField}
                       />
                     </div>
-                    <button
-                      onClick={() => rescan()}
-                      disabled={locked || !sudoPassword}
-                      className="rounded-md bg-surface-2 px-4 py-2 text-sm hover:bg-border disabled:opacity-50"
-                    >
+                    <Button variant="secondary" onClick={() => rescan()} disabled={locked || !sudoPassword}>
+                      <LockOpen />
                       Unlock
-                    </button>
+                    </Button>
                   </div>
                 )}
-                {plan.sudoError && <p className="mt-2 text-danger">{plan.sudoError}</p>}
+                {plan.sudoError && <Notice tone="error">{plan.sudoError}</Notice>}
               </div>
             )}
-          </section>
+          </Card>
 
           {/* Which account deployments run under */}
           <section className="mb-6">
-            <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Deploy as</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ModeCard
+            <h2 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Deploy as</h2>
+            <RadioGroup
+              value={mode}
+              onValueChange={(v) => v !== mode && rescan({ mode: v as Mode })}
+              disabled={locked}
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <ModeOption
+                value="login"
                 active={mode === "login"}
                 disabled={locked}
                 title={`My account (${facts.loginUser})`}
                 body="Apps and containers run under the account you log in with. Works without admin rights."
-                onSelect={() => mode !== "login" && rescan({ mode: "login" })}
               />
-              <ModeCard
+              <ModeOption
+                value="create"
                 active={mode === "create"}
                 disabled={locked || !facts.adminReady}
                 title="Dedicated user"
@@ -291,22 +322,21 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
                     ? "A separate account just for deployments, kept apart from your login."
                     : "Needs admin rights to create the account."
                 }
-                onSelect={() => mode !== "create" && rescan({ mode: "create" })}
               >
                 {mode === "create" && (
-                  <input
-                    className={`${input} mt-3 font-mono`}
+                  <Input
+                    className="mt-3 font-mono"
                     value={deployUser}
                     spellCheck={false}
                     disabled={locked}
-                    onClick={(e) => e.stopPropagation()}
+                    aria-label="Deploy username"
                     onChange={(e) => setDeployUser(e.target.value)}
                     onBlur={() => deployUser.trim() !== plan.deployUser && rescan()}
                     onKeyDown={(e) => e.key === "Enter" && rescan()}
                   />
                 )}
-              </ModeCard>
-            </div>
+              </ModeOption>
+            </RadioGroup>
           </section>
 
           {groups.map((g) => {
@@ -319,54 +349,47 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
             return (
               <section key={g.id} className="mb-4">
                 <div className="mb-2 flex items-baseline justify-between">
-                  <h2 className="text-xs font-medium uppercase tracking-wide text-muted">{g.title}</h2>
-                  <span className="text-xs text-muted">{g.hint}</span>
+                  <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{g.title}</h2>
+                  <span className="text-xs text-muted-foreground">{g.hint}</span>
                 </div>
                 {shared && (
-                  <p className="mb-2 rounded-md border border-warning/20 bg-warning/5 px-3 py-2 text-[13px] text-warning">
+                  <Notice tone="warning" className="mb-2">
                     {shared}
-                  </p>
+                  </Notice>
                 )}
-                <ul
-                  className={`divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface ${
-                    scanning ? "opacity-60" : ""
-                  }`}
-                >
-                  {list.map((s) => (
-                    <StepRow
-                      key={s.id}
-                      step={s}
-                      checked={selected.has(s.id)}
-                      status={statuses[s.id]}
-                      running={busy}
-                      expanded={expanded.has(s.id)}
-                      sharedReason={shared}
-                      disabled={locked || !!s.unavailable}
-                      onToggle={() => setSelected((x) => toggle(x, s.id))}
-                      onExpand={() => setExpanded((x) => toggle(x, s.id))}
-                    />
-                  ))}
-                </ul>
+                <Card className={cn("gap-0 py-0", scanning && "opacity-60")}>
+                  <ul className="divide-y divide-border">
+                    {list.map((s) => (
+                      <StepRow
+                        key={s.id}
+                        step={s}
+                        checked={selected.has(s.id)}
+                        status={statuses[s.id]}
+                        running={busy}
+                        expanded={expanded.has(s.id)}
+                        sharedReason={shared}
+                        disabled={locked || !!s.unavailable}
+                        onToggle={() => setSelected((x) => toggle(x, s.id))}
+                        onExpand={() => setExpanded((x) => toggle(x, s.id))}
+                      />
+                    ))}
+                  </ul>
+                </Card>
               </section>
             );
           })}
 
           <div className="mt-4 flex items-center gap-3">
             {busy ? (
-              <button
-                onClick={() => runId.current && api.cancelSetup(runId.current)}
-                className="rounded-md border border-danger/60 px-4 py-2 text-sm text-danger hover:bg-danger/10"
-              >
+              <Button variant="destructive" onClick={() => runId.current && api.cancelSetup(runId.current)}>
+                <Square />
                 Cancel
-              </button>
+              </Button>
             ) : (
-              <button
-                onClick={start}
-                disabled={chosen.length === 0 || scanning}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
-              >
+              <Button onClick={start} disabled={chosen.length === 0 || scanning}>
+                <Play />
                 Run {chosen.length} step{chosen.length === 1 ? "" : "s"}
-              </button>
+              </Button>
             )}
             <RunSummary run={run} error={runError} />
           </div>
@@ -390,10 +413,10 @@ export function ServerSetup({ server, onBack }: { server: Server; onBack: () => 
 }
 
 function Fact({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" | "muted" }) {
-  const dot = tone === "ok" ? "bg-accent" : tone === "warn" ? "bg-warning" : tone === "muted" ? "bg-muted/50" : "";
+  const dot = tone === "ok" ? "bg-success" : tone === "warn" ? "bg-warning" : tone === "muted" ? "bg-muted-foreground/50" : "";
   return (
     <div className="px-4 py-3">
-      <div className="text-xs text-muted">{label}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
       <div className="mt-1 flex items-center gap-2 font-mono text-sm">
         {dot && <span className={`size-1.5 rounded-full ${dot}`} />}
         <span className="selectable truncate">{value}</span>
@@ -402,42 +425,38 @@ function Fact({ label, value, tone }: { label: string; value: string; tone?: "ok
   );
 }
 
-function ModeCard({
+/** One option card in the "Deploy as" radio group. */
+function ModeOption({
+  value,
   active,
   disabled,
   title,
   body,
-  onSelect,
   children,
 }: {
+  value: Mode;
   active: boolean;
   disabled: boolean;
   title: string;
   body: string;
-  onSelect: () => void;
   children?: React.ReactNode;
 }) {
+  const id = `mode-${value}`;
   return (
     <div
-      role="radio"
-      aria-checked={active}
-      aria-disabled={disabled}
-      tabIndex={disabled ? -1 : 0}
-      onClick={() => !disabled && onSelect()}
-      onKeyDown={(e) => !disabled && (e.key === "Enter" || e.key === " ") && onSelect()}
-      className={`rounded-lg border p-4 transition-colors ${
-        active ? "border-accent bg-accent/5" : "border-border bg-surface"
-      } ${disabled && !active ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:border-accent/60"}`}
+      className={cn(
+        "rounded-lg border p-4 transition-colors",
+        active ? "border-primary bg-primary/5" : "border-border bg-card",
+        disabled && !active ? "opacity-50" : "hover:border-primary/60",
+      )}
     >
-      <div className="flex items-center gap-2.5">
-        <span
-          className={`grid size-4 place-items-center rounded-full border ${active ? "border-accent" : "border-muted/60"}`}
-        >
-          {active && <span className="size-2 rounded-full bg-accent" />}
+      <Label htmlFor={id} className={cn("flex items-start gap-2.5", disabled ? "cursor-not-allowed" : "cursor-pointer")}>
+        <RadioGroupItem id={id} value={value} disabled={disabled} className="mt-0.5" />
+        <span>
+          <span className="block text-sm font-medium">{title}</span>
+          <span className="mt-1.5 block text-[13px] font-normal text-muted-foreground">{body}</span>
         </span>
-        <span className="text-sm font-medium">{title}</span>
-      </div>
-      <p className="mt-1.5 pl-6.5 text-[13px] text-muted">{body}</p>
+      </Label>
       {children && <div className="pl-6.5">{children}</div>}
     </div>
   );
@@ -465,48 +484,61 @@ function StepRow({
   onExpand: () => void;
 }) {
   const blocked = !!step.unavailable && !step.done;
+  const id = `step-${step.id}`;
   return (
-    <li className={`p-4 ${blocked ? "opacity-70" : ""}`}>
+    <li className={cn("p-4", blocked && "opacity-70")}>
       <div className="flex items-start gap-3">
         <div className="mt-0.5 grid size-5 shrink-0 place-items-center">
           {running && status ? (
             <StatusIcon status={status.status} />
           ) : (
-            <input
-              type="checkbox"
-              checked={checked}
-              disabled={disabled}
-              onChange={onToggle}
-              className="size-4 accent-[var(--accent)] disabled:opacity-40"
-            />
+            <Checkbox id={id} checked={checked} disabled={disabled} onCheckedChange={onToggle} />
           )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">{step.title}</span>
+            <Label htmlFor={id} className="text-sm font-medium">
+              {step.title}
+            </Label>
             {step.done ? (
-              <Badge tone="ok">Done</Badge>
+              <Badge className="bg-success/10 text-success">
+                <CircleCheck />
+                Done
+              </Badge>
             ) : step.unavailable ? (
-              <Badge tone="muted">Unavailable</Badge>
+              <Badge variant="secondary" className="text-muted-foreground">
+                Unavailable
+              </Badge>
             ) : (
-              <Badge tone="warn">Not set up</Badge>
+              <Badge className="bg-warning/10 text-warning">Not set up</Badge>
             )}
-            {step.runAs === "root" && <Badge tone="muted">admin</Badge>}
+            {step.runAs === "root" && (
+              <Badge variant="outline" className="text-muted-foreground">
+                <ShieldAlert />
+                admin
+              </Badge>
+            )}
             {status?.durationMs ? (
-              <span className="font-mono text-[11px] text-muted">{(status.durationMs / 1000).toFixed(1)}s</span>
+              <span className="font-mono text-[11px] text-muted-foreground">{(status.durationMs / 1000).toFixed(1)}s</span>
             ) : null}
           </div>
-          <p className="mt-1 text-[13px] text-muted">{step.description}</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">{step.description}</p>
           {blocked && (step.unavailable !== sharedReason || step.adminCommands) && (
             <Unavailable
               reason={step.unavailable === sharedReason ? "Your admin can enable this with:" : step.unavailable!}
               commands={step.adminCommands}
             />
           )}
-          {status?.error && <p className="selectable mt-1 text-[13px] text-danger">{status.error}</p>}
-          <button onClick={onExpand} className="mt-2 text-xs text-accent">
+          {status?.error && (
+            <Notice tone="error" className="mt-2">
+              {status.error}
+            </Notice>
+          )}
+          <Button variant="link" size="xs" onClick={onExpand} className="mt-1 h-auto px-0">
+            <Code />
             {expanded ? "Hide commands" : "View commands"}
-          </button>
+            {expanded ? <ChevronDown /> : <ChevronRight />}
+          </Button>
           {expanded && (
             <pre className="selectable mt-2 max-h-72 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-[12px] leading-relaxed text-foreground/90">
               {step.script}
@@ -520,51 +552,61 @@ function StepRow({
 
 // Why a step can't run, plus copyable commands for an admin when there are any.
 function Unavailable({ reason, commands: cmd }: { reason: string; commands?: string }) {
-  const [copied, setCopied] = useState(false);
   return (
-    <div className="mt-2 rounded-md border border-warning/20 bg-warning/5 p-2.5 text-[13px] text-warning">
+    <Notice tone="warning" className="mt-2">
       {reason}
       {cmd && (
         <div className="mt-2 flex items-start gap-2">
-          <code className="selectable flex-1 rounded bg-background px-2 py-1.5 font-mono text-[12px] text-foreground/90">
-            {cmd}
-          </code>
-          <button
-            onClick={() => {
-              void navigator.clipboard.writeText(cmd).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              });
-            }}
-            className="shrink-0 rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-surface-2"
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
+          <code className="selectable flex-1 rounded bg-background px-2 py-1.5 font-mono text-[12px] text-foreground/90">{cmd}</code>
+          <CopyButton text={cmd} />
         </div>
       )}
-    </div>
+    </Notice>
   );
 }
 
-function Badge({ tone, children }: { tone: "ok" | "warn" | "muted"; children: React.ReactNode }) {
-  const cls =
-    tone === "ok" ? "bg-accent/10 text-accent" : tone === "warn" ? "bg-warning/10 text-warning" : "bg-surface-2 text-muted";
-  return <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${cls}`}>{children}</span>;
-}
-
 function StatusIcon({ status }: { status: StepStatus["status"] }) {
-  if (status === "running")
-    return <span className="size-3.5 animate-spin rounded-full border-2 border-accent border-t-transparent" />;
-  if (status === "done") return <span className="text-sm text-accent">✓</span>;
-  if (status === "failed") return <span className="text-sm text-danger">✕</span>;
-  return <span className="text-sm text-muted">–</span>;
+  if (status === "running") return <Loader2 className="size-4 animate-spin text-primary" />;
+  if (status === "done") return <CircleCheck className="size-4 text-success" />;
+  if (status === "failed") return <CircleX className="size-4 text-destructive" />;
+  return <Minus className="size-4 text-muted-foreground" />;
 }
 
 function RunSummary({ run, error }: { run: RunState; error: string | null }) {
-  if (run === "starting") return <span className="text-sm text-muted">Connecting…</span>;
-  if (run === "running") return <span className="text-sm text-muted">Running…</span>;
-  if (run === "done") return <span className="text-sm text-accent">All steps finished.</span>;
-  if (run === "cancelled") return <span className="text-sm text-warning">Cancelled.</span>;
-  if (run === "failed") return <span className="selectable text-sm text-danger">{error ?? "Setup failed."}</span>;
+  if (run === "starting")
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Connecting…
+      </span>
+    );
+  if (run === "running")
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        Running…
+      </span>
+    );
+  if (run === "done")
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-success">
+        <CircleCheck className="size-4" />
+        All steps finished.
+      </span>
+    );
+  if (run === "cancelled")
+    return (
+      <span className="flex items-center gap-1.5 text-sm text-warning">
+        <TriangleAlert className="size-4" />
+        Cancelled.
+      </span>
+    );
+  if (run === "failed")
+    return (
+      <span className="selectable flex items-center gap-1.5 text-sm text-destructive">
+        <CircleX className="size-4 shrink-0" />
+        {error ?? "Setup failed."}
+      </span>
+    );
   return null;
 }

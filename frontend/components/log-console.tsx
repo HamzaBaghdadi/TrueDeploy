@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 
 export type LogEntry = {
@@ -32,8 +33,8 @@ export function LogConsole({
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       <div className="flex items-center justify-between border-b border-border bg-surface px-4 py-2">
-        <span className="text-xs font-medium text-muted">{title}</span>
-        {running && <span className="size-2 animate-pulse rounded-full bg-accent" />}
+        <span className="text-xs font-medium text-muted-foreground">{title}</span>
+        {running && <span className="size-2 animate-pulse rounded-full bg-primary" />}
       </div>
       <div
         ref={ref}
@@ -41,13 +42,16 @@ export function LogConsole({
           const el = e.currentTarget;
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
-        className={`selectable ${height} overflow-auto bg-[#07090b] p-3 font-mono text-[12px] leading-relaxed`}
+        className={`selectable ${height} overflow-auto bg-terminal p-3 font-mono text-[12px] leading-relaxed`}
       >
-        {entries.length === 0 && <div className="text-muted">{running ? "Waiting for output…" : "No output."}</div>}
+        {entries.length === 0 && <div className="text-muted-foreground">{running ? "Waiting for output…" : "No output."}</div>}
         {entries.map((l, i) => (
           <div key={i}>
             {l.section && (i === 0 || entries[i - 1].section !== l.section) && (
-              <div className="mt-2 mb-1 font-semibold text-accent first:mt-0">▶ {l.section}</div>
+              <div className="mt-2 mb-1 flex items-center gap-1 font-semibold text-primary first:mt-0">
+                <ChevronRight className="size-3.5" />
+                {l.section}
+              </div>
             )}
             <div
               className={`whitespace-pre-wrap break-all ${

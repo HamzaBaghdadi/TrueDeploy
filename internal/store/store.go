@@ -142,6 +142,9 @@ func (s *Store) Delete(id string) error {
 
 func (s *Store) path(name string) string { return filepath.Join(s.dir, name) }
 
+// Dir is the folder holding TrueDeploy's data on this computer.
+func (s *Store) Dir() string { return s.dir }
+
 func (s *Store) readServers() (map[string]Server, error) {
 	m := map[string]Server{}
 	err := readJSON(s.path("servers.json"), &m)

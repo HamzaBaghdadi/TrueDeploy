@@ -1,14 +1,18 @@
 package sshx
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -75,6 +79,51 @@ func serve(nc net.Conn, cfg *ssh.ServerConfig) {
 		go func() {
 			defer ch.Close()
 			for req := range creqs {
+				switch req.Type {
+				case "pty-req":
+					var p struct {
+						Term          string
+						Cols, Rows    uint32
+						Width, Height uint32
+						Modes         string
+					}
+					ssh.Unmarshal(req.Payload, &p)
+					lastPTY.Store(fmt.Sprintf("%s %dx%d", p.Term, p.Cols, p.Rows))
+					req.Reply(true, nil)
+					continue
+				case "window-change":
+					var p struct{ Cols, Rows, Width, Height uint32 }
+					ssh.Unmarshal(req.Payload, &p)
+					lastWindow.Store(fmt.Sprintf("%dx%d", p.Cols, p.Rows))
+					continue
+				case "shell":
+					req.Reply(true, nil)
+					// A tiny "shell": echo lines back until "exit".
+					go func() {
+						ch.Write([]byte("$ "))
+						buf := make([]byte, 1024)
+						var line []byte
+						for {
+							n, err := ch.Read(buf)
+							if err != nil {
+								return
+							}
+							ch.Write(buf[:n])
+							line = append(line, buf[:n]...)
+							if i := bytes.IndexByte(line, '\n'); i >= 0 {
+								if strings.TrimSpace(string(line[:i])) == "exit" {
+									ch.CloseWrite()
+									ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
+									ch.Close()
+									return
+								}
+								line = line[i+1:]
+								ch.Write([]byte("$ "))
+							}
+						}
+					}()
+					continue
+				}
 				if req.Type != "exec" {
 					req.Reply(false, nil)
 					continue
@@ -89,6 +138,64 @@ func serve(nc net.Conn, cfg *ssh.ServerConfig) {
 			}
 		}()
 	}
+}
+
+var lastPTY, lastWindow atomic.Value
+
+func TestInteractiveShell(t *testing.T) {
+	host, port, _ := startServer(t, nil)
+	c, err := Dial(Target{Host: host, Port: port, User: "root", Auth: AuthPassword, Password: "secret"}, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	var mu sync.Mutex
+	var out bytes.Buffer
+	sh, err := c.OpenShell(120, 40, func(b []byte) {
+		mu.Lock()
+		out.Write(b)
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := lastPTY.Load().(string); got != "xterm-256color 120x40" {
+		t.Fatalf("pty request = %q", got)
+	}
+
+	if err := sh.Write([]byte("echo héllo\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sh.Resize(200, 50); err != nil {
+		t.Fatal(err)
+	}
+	waitFor := func(cond func() bool) bool {
+		for i := 0; i < 100; i++ {
+			if cond() {
+				return true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return false
+	}
+	if !waitFor(func() bool { mu.Lock(); defer mu.Unlock(); return strings.Contains(out.String(), "echo héllo") }) {
+		t.Fatalf("typed text not echoed; output: %q", out.String())
+	}
+	if !waitFor(func() bool { s, _ := lastWindow.Load().(string); return s == "200x50" }) {
+		t.Fatalf("resize not received: %v", lastWindow.Load())
+	}
+
+	sh.Write([]byte("exit\n"))
+	select {
+	case <-sh.Done():
+		if sh.Err() != nil {
+			t.Fatalf("clean exit reported an error: %v", sh.Err())
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("shell didn't finish after exit")
+	}
+	sh.Close() // idempotent after exit
 }
 
 func TestPasswordAuthAndRun(t *testing.T) {
@@ -201,4 +308,53 @@ func TestConnectionRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error dialing closed port " + strconv.Itoa(port))
 	}
+}
+
+func TestOpenCommandRunsOnAPTY(t *testing.T) {
+	host, port, fp := startServer(t, nil)
+	c, err := Dial(Target{Host: host, Port: port, User: "u", Auth: AuthPassword, Password: "secret", HostKeyFingerprint: fp}, 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	var mu sync.Mutex
+	var got bytes.Buffer
+	sh, err := c.OpenCommand(100, 30, "docker exec -it web sh", func(b []byte) {
+		mu.Lock()
+		got.Write(b)
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-sh.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("command didn't finish")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(got.String(), "ran: docker exec -it web sh") {
+		t.Errorf("output %q", got.String())
+	}
+	if v, _ := lastPTY.Load().(string); !strings.Contains(v, "100x30") {
+		t.Errorf("pty %q", v)
+	}
+}
+
+func TestNewKeyPairLogsIn(t *testing.T) {
+	priv, _, err := NewKeyPair("truedeploy-login-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	signer, err := ssh.ParsePrivateKey([]byte(priv))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port, fp := startServer(t, signer.PublicKey())
+	c, err := Dial(Target{Host: host, Port: port, User: "u", Auth: AuthKey, PrivateKey: priv, HostKeyFingerprint: fp}, 5*time.Second)
+	if err != nil {
+		t.Fatalf("a generated key must log in: %v", err)
+	}
+	c.Close()
 }

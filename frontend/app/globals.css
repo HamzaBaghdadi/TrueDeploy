@@ -1,49 +1,147 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * TrueDeploy palette, derived from the logo (cloud + infinity + rocket):
+ *   cyan #15AFEB → azure #1189EB → royal #105AE3 → navy #102F8A, silver ribbon #DBE1E9.
+ * Dark only. Tokens follow shadcn/ui naming so every ui/ component picks them up:
+ *   primary = brand blue (actions, links, selection), success = green (healthy/done states),
+ *   info = logo cyan (in progress), accent = subtle hover fill (shadcn meaning).
+ * Surfaces are tinted with the logo's navy hue (≈222°) instead of neutral grey.
+ */
 :root {
-  --background: #0b0d10;
-  --surface: #12161b;
-  --surface-2: #181d24;
-  --border: #242b34;
-  --foreground: #e6e9ee;
-  --muted: #8a94a3;
-  --accent: #3ddc97;
-  --accent-ink: #062016;
-  --danger: #ff6b6b;
-  --warning: #f5b84a;
-}
+  --background: #070b14;
+  --foreground: #e6ecf7;
+  --card: #0c1322;
+  --card-foreground: #e6ecf7;
+  --popover: #0e1628;
+  --popover-foreground: #e6ecf7;
 
+  /* Royal blue from the logo, lifted for contrast on dark: white text 4.6:1, as text 4.2:1. */
+  --primary: #1f6ef2;
+  --primary-foreground: #ffffff;
+  --secondary: #121b2e;
+  --secondary-foreground: #e6ecf7;
+  --muted: #121b2e;
+  --muted-foreground: #8b99b5;
+  --accent: #17223a;
+  --accent-foreground: #e6ecf7;
+  --destructive: #f87171;
+  --border: #1c2840;
+  --input: #253350;
+  --ring: #3b8bff;
+  --radius: 0.5rem;
+
+  /* Layout layers */
+  --surface: #0c1322;
+  --surface-2: #121b2e;
+  --terminal: #060a13;
+
+  /* Semantic */
+  --success: #34d399;
+  --info: #22c3f0;
+  --warning: #f5b84a;
+  --danger: #f87171;
+
+  /* Brand (logo) */
+  --brand-cyan: #15afeb;
+  --brand-azure: #1189eb;
+  --brand-royal: #105ae3;
+  --brand-navy: #102f8a;
+  --brand-silver: #dbe1e9;
+  --brand-gradient: linear-gradient(135deg, #15afeb 0%, #1189eb 45%, #105ae3 100%);
+
+  --sidebar: #0a101d;
+  --sidebar-foreground: #e6ecf7;
+  --sidebar-primary: #1f6ef2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #131d32;
+  --sidebar-accent-foreground: #e6ecf7;
+  --sidebar-border: #18233a;
+  --sidebar-ring: #3b8bff;
+}
 @theme inline {
   --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
-  --color-border: var(--border);
-  --color-foreground: var(--foreground);
-  --color-muted: var(--muted);
-  --color-accent: var(--accent);
-  --color-accent-ink: var(--accent-ink);
+  --color-terminal: var(--terminal);
   --color-danger: var(--danger);
   --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-brand-azure: var(--brand-azure);
+  --color-brand-royal: var(--brand-royal);
+  --color-brand-navy: var(--brand-navy);
+  --color-brand-silver: var(--brand-silver);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
 }
 
-html,
-body {
-  height: 100%;
-  background: var(--background);
-  color: var(--foreground);
-  color-scheme: dark;
-}
-
-/* Desktop app: no text-selection on chrome, but allow it in content. */
-body {
-  user-select: none;
-}
-input,
-textarea,
-.selectable {
-  user-select: text;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    height: 100%;
+    color-scheme: dark;
+  }
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground;
+    /* Desktop app: no text selection on chrome; opt in with .selectable or inputs. */
+    user-select: none;
+  }
+  input,
+  textarea,
+  .selectable {
+    user-select: text;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 @keyframes fade-in {
@@ -60,8 +158,20 @@ textarea,
 
 ::-webkit-scrollbar {
   width: 10px;
+  height: 10px;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 8px;
+}
+
+/* Logo gradient for brand highlights (e.g. the active nav marker). */
+.bg-brand-gradient {
+  background-image: var(--brand-gradient);
+}
+.text-brand-gradient {
+  background-image: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }

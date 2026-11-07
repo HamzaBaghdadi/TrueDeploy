@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import "@xterm/xterm/css/xterm.css";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { ConfirmProvider } from "@/components/confirm-dialog";
+import { TerminalHost } from "@/components/terminal-host";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { CommandPalette } from "@/components/command-palette";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,12 +25,18 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
       <body className="flex h-full font-sans">
-        <ConfirmProvider>
-          <Sidebar />
-          <main className="flex-1 overflow-y-auto">{children}</main>
-        </ConfirmProvider>
+        <TooltipProvider delayDuration={300}>
+          <ConfirmProvider>
+            <Sidebar />
+            <main className="relative flex-1 overflow-y-auto">
+              {children}
+              <TerminalHost />
+            </main>
+            <CommandPalette />
+          </ConfirmProvider>
+        </TooltipProvider>
       </body>
     </html>
   );

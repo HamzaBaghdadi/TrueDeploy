@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -93,4 +94,79 @@ func TestProjectsEnvEncryptedAndHistoryCapped(t *testing.T) {
 	if deps, _ := s.ListDeployments(p.ID); len(deps) != 0 {
 		t.Fatal("deleting a project should delete its history")
 	}
+}
+
+func TestSnapshotRestore(t *testing.T) {
+	src := openTestStore(t)
+	if err := src.Put(Server{ID: "s1", Name: "prod", Host: "h", Port: 22, User: "u", Auth: "key"}, Secrets{PrivateKey: "-----BEGIN KEY-----"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.PutProject(Project{ID: "p1", Name: "shop", ServerID: "s1"}, map[string]string{"JWT": "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.SetGitHub(&GitHubAccount{Login: "me", Token: "ghp_x"}); err != nil {
+		t.Fatal(err)
+	}
+	sn, err := src.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sn.Summary()
+	if len(sum.Servers) != 1 || sum.Servers[0] != "prod" || len(sum.Projects) != 1 || sum.GitHub != "me" {
+		t.Fatalf("summary: %+v", sum)
+	}
+	fp := sn.Fingerprint()
+
+	// Round trip through JSON, as the file does.
+	raw, _ := json.Marshal(sn)
+	var back Snapshot
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatal(err)
+	}
+
+	// Merge into a computer that already has another server and a different project with the same ID.
+	dst := openTestStore(t)
+	_ = dst.Put(Server{ID: "s2", Name: "staging"}, Secrets{Password: "pw"})
+	_ = dst.PutProject(Project{ID: "p1", Name: "local version", ServerID: "s2"}, map[string]string{"A": "1"})
+	if err := dst.Restore(back, false); err != nil {
+		t.Fatal(err)
+	}
+	servers, _ := dst.List()
+	if len(servers) != 2 {
+		t.Errorf("merge should add the missing server: %+v", servers)
+	}
+	if _, sec, err := dst.Get("s1"); err != nil || sec.PrivateKey != "-----BEGIN KEY-----" {
+		t.Errorf("imported key: %v %+v", err, sec)
+	}
+	if p, env, _ := dst.GetProject("p1"); p.Name != "local version" || env["A"] != "1" {
+		t.Errorf("merge must keep this computer's version: %+v %v", p, env)
+	}
+	if gh, _ := dst.GitHub(); gh == nil || gh.Token != "ghp_x" {
+		t.Errorf("github: %+v", gh)
+	}
+
+	// Replace makes it identical (re-encrypted with this computer's key).
+	if err := dst.Restore(back, true); err != nil {
+		t.Fatal(err)
+	}
+	servers, _ = dst.List()
+	if p, env, _ := dst.GetProject("p1"); len(servers) != 1 || p.Name != "shop" || env["JWT"] != "secret" {
+		t.Errorf("replace: %+v %+v %v", servers, p, env)
+	}
+	again, _ := dst.Snapshot()
+	if again.Fingerprint() != fp {
+		t.Error("after replace the state should match the export")
+	}
+	if b, _ := os.ReadFile(filepath.Join(dst.Dir(), "envs.json")); strings.Contains(string(b), "secret") {
+		t.Error("secrets must stay encrypted at rest after import")
+	}
+	if err := dst.Restore(Snapshot{App: "Other"}, true); err == nil {
+		t.Error("foreign snapshot accepted")
+	}
+}
+
+func openTestStore(t *testing.T) *Store {
+	t.Helper()
+	keyring.MockInit()
+	return &Store{dir: t.TempDir()}
 }

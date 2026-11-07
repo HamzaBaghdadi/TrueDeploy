@@ -1,12 +1,16 @@
 "use client";
 
+import { FileKey, FolderOpen, KeyRound, Loader2, Plug, Save, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { api, type AuthMethod, type ServerInfo, type Target } from "@/lib/api";
 import { ServerInfoPanel } from "@/components/server-info";
-
-const input =
-  "w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted/60 focus:border-accent";
-const label = "mb-1.5 block text-xs font-medium text-muted";
+import { Notice } from "@/components/notice";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCancel: () => void }) {
   const [name, setName] = useState("");
@@ -91,15 +95,15 @@ export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCa
           void test();
         }}
       >
-        <div>
-          <label className={label}>Name</label>
-          <input className={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="production-1" />
+        <div className="space-y-1.5">
+          <Label htmlFor="srv-name">Name</Label>
+          <Input id="srv-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="production-1" />
         </div>
         <div className="grid grid-cols-[1fr_90px] gap-3">
-          <div>
-            <label className={label}>Host / IP</label>
-            <input
-              className={input}
+          <div className="space-y-1.5">
+            <Label htmlFor="srv-host">Host / IP</Label>
+            <Input
+              id="srv-host"
               value={host}
               onChange={(e) => edit(setHost)(e.target.value)}
               placeholder="203.0.113.10"
@@ -107,37 +111,41 @@ export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCa
               autoFocus
             />
           </div>
-          <div>
-            <label className={label}>Port</label>
-            <input className={input} value={port} onChange={(e) => edit(setPort)(e.target.value)} inputMode="numeric" />
+          <div className="space-y-1.5">
+            <Label htmlFor="srv-port">Port</Label>
+            <Input id="srv-port" value={port} onChange={(e) => edit(setPort)(e.target.value)} inputMode="numeric" />
           </div>
         </div>
-        <div>
-          <label className={label}>Username</label>
-          <input className={input} value={user} onChange={(e) => edit(setUser)(e.target.value)} required />
+        <div className="space-y-1.5">
+          <Label htmlFor="srv-user">Username</Label>
+          <Input id="srv-user" value={user} onChange={(e) => edit(setUser)(e.target.value)} required />
         </div>
 
-        <div>
-          <label className={label}>Authentication</label>
-          <div className="inline-flex rounded-md border border-border bg-background p-0.5 text-sm">
-            {(["key", "password"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => edit(setAuth)(m)}
-                className={`rounded px-3 py-1.5 ${auth === m ? "bg-surface-2 text-foreground" : "text-muted"}`}
-              >
-                {m === "key" ? "SSH key" : "Password"}
-              </button>
-            ))}
-          </div>
+        <div className="space-y-1.5">
+          <Label>Authentication</Label>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            spacing={0}
+            value={auth}
+            onValueChange={(v) => v && edit(setAuth)(v as AuthMethod)}
+          >
+            <ToggleGroupItem value="key">
+              <KeyRound />
+              SSH key
+            </ToggleGroupItem>
+            <ToggleGroupItem value="password">
+              <ShieldCheck />
+              Password
+            </ToggleGroupItem>
+          </ToggleGroup>
         </div>
 
         {auth === "password" ? (
-          <div>
-            <label className={label}>Password</label>
-            <input
-              className={input}
+          <div className="space-y-1.5">
+            <Label htmlFor="srv-password">Password</Label>
+            <Input
+              id="srv-password"
               type="password"
               value={password}
               onChange={(e) => edit(setPassword)(e.target.value)}
@@ -146,16 +154,18 @@ export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCa
           </div>
         ) : (
           <>
-            <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <span className="text-xs font-medium text-muted">Private key</span>
-                <button type="button" className="text-xs text-accent" onClick={() => setPasteKey(!pasteKey)}>
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="srv-key">Private key</Label>
+                <Button type="button" variant="link" size="xs" onClick={() => setPasteKey(!pasteKey)}>
+                  {pasteKey ? <FolderOpen /> : <FileKey />}
                   {pasteKey ? "Use a key file instead" : "Paste key instead"}
-                </button>
+                </Button>
               </div>
               {pasteKey ? (
-                <textarea
-                  className={`${input} h-32 font-mono text-xs`}
+                <Textarea
+                  id="srv-key"
+                  className="h-32 font-mono text-xs"
                   value={privateKey}
                   onChange={(e) => edit(setPrivateKey)(e.target.value)}
                   placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
@@ -163,27 +173,25 @@ export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCa
                 />
               ) : (
                 <div className="flex gap-2">
-                  <input
-                    className={`${input} font-mono text-xs`}
+                  <Input
+                    id="srv-key"
+                    className="font-mono text-xs"
                     value={keyPath}
                     onChange={(e) => edit(setKeyPath)(e.target.value)}
                     placeholder="C:\Users\you\.ssh\id_ed25519"
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={browse}
-                    className="shrink-0 rounded-md border border-border px-3 text-sm hover:bg-surface-2"
-                  >
+                  <Button type="button" variant="outline" onClick={browse}>
+                    <FolderOpen />
                     Browse…
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
-            <div>
-              <label className={label}>Key passphrase (if any)</label>
-              <input
-                className={input}
+            <div className="space-y-1.5">
+              <Label htmlFor="srv-passphrase">Key passphrase (if any)</Label>
+              <Input
+                id="srv-passphrase"
                 type="password"
                 value={passphrase}
                 onChange={(e) => edit(setPassphrase)(e.target.value)}
@@ -193,45 +201,51 @@ export function AddServerForm({ onSaved, onCancel }: { onSaved: () => void; onCa
         )}
 
         <div className="flex gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={busy !== null}
-            className="rounded-md border border-border bg-surface-2 px-4 py-2 text-sm font-medium hover:border-accent disabled:opacity-50"
-          >
+          <Button type="submit" variant="outline" disabled={busy !== null}>
+            {busy === "test" ? <Loader2 className="animate-spin" /> : <Plug />}
             {busy === "test" ? "Connecting…" : "Test connection"}
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             onClick={save}
             disabled={!info || busy !== null}
             title={info ? undefined : "Test the connection first"}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-ink disabled:opacity-40"
           >
+            {busy === "save" ? <Loader2 className="animate-spin" /> : <Save />}
             {busy === "save" ? "Saving…" : "Save server"}
-          </button>
-          <button type="button" onClick={onCancel} className="ml-auto px-3 py-2 text-sm text-muted hover:text-foreground">
+          </Button>
+          <Button type="button" variant="ghost" onClick={onCancel} className="ml-auto">
             Cancel
-          </button>
+          </Button>
         </div>
       </form>
 
-      <div className="rounded-lg border border-border bg-surface p-4">
-        <h3 className="mb-3 text-sm font-medium">Connection result</h3>
-        {busy === "test" && <p className="text-sm text-muted">Connecting to {host}…</p>}
-        {error && <p className="selectable rounded-md bg-danger/10 p-3 text-sm text-danger">{error}</p>}
-        {info && (
-          <>
-            <p className="mb-3 rounded-md bg-accent/10 p-3 text-sm text-accent">Connected successfully.</p>
-            <ServerInfoPanel info={info} />
-            <p className="mt-3 text-xs text-muted">
-              Saving pins this host key. TrueDeploy will refuse to connect if it changes.
+      <Card size="sm" className="h-fit">
+        <CardHeader>
+          <CardTitle>Connection result</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {busy === "test" && (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" />
+              Connecting to {host}…
             </p>
-          </>
-        )}
-        {!busy && !error && !info && (
-          <p className="text-sm text-muted">Fill in the details and press “Test connection”.</p>
-        )}
-      </div>
+          )}
+          {error && <Notice tone="error">{error}</Notice>}
+          {info && (
+            <>
+              <Notice tone="success">Connected successfully.</Notice>
+              <ServerInfoPanel info={info} />
+              <p className="text-xs text-muted-foreground">
+                Saving pins this host key. TrueDeploy will refuse to connect if it changes.
+              </p>
+            </>
+          )}
+          {!busy && !error && !info && (
+            <p className="text-sm text-muted-foreground">Fill in the details and press “Test connection”.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
