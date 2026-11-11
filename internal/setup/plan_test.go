@@ -20,7 +20,7 @@ func has(steps []Step, id string) bool {
 }
 
 func TestNoAdminAccess(t *testing.T) {
-	f := Facts{LoginUser: "safeer", Access: AccessNone, UIDMap: true, SubUID: true}
+	f := Facts{LoginUser: "deployer", Access: AccessNone, UIDMap: true, SubUID: true}
 	steps := Steps(Options{Mode: ModeLogin}, f)
 
 	for _, s := range steps {
@@ -44,12 +44,12 @@ func TestNoAdminAccess(t *testing.T) {
 }
 
 func TestRootlessNeedsAdminPrereqs(t *testing.T) {
-	f := Facts{LoginUser: "safeer", Access: AccessNone}
+	f := Facts{LoginUser: "deployer", Access: AccessNone}
 	s, ok := Find(Steps(Options{Mode: ModeLogin}, f), "rootless-docker")
 	if !ok || s.Unavailable == "" {
 		t.Fatal("rootless Docker without uidmap/subuid must be unavailable")
 	}
-	for _, want := range []string{"uidmap", "/etc/subuid", "safeer:100000:65536"} {
+	for _, want := range []string{"uidmap", "/etc/subuid", "deployer:100000:65536"} {
 		if !strings.Contains(s.AdminCommands, want) {
 			t.Errorf("admin commands should include %q: %s", want, s.AdminCommands)
 		}
@@ -57,7 +57,7 @@ func TestRootlessNeedsAdminPrereqs(t *testing.T) {
 }
 
 func TestRootlessNotOfferedWhenDockerUsable(t *testing.T) {
-	f := Facts{LoginUser: "safeer", Access: AccessNone, DockerInstalled: true, DockerAccess: true}
+	f := Facts{LoginUser: "deployer", Access: AccessNone, DockerInstalled: true, DockerAccess: true}
 	if has(Steps(Options{Mode: ModeLogin}, f), "rootless-docker") {
 		t.Error("no rootless Docker when the system Docker is already usable")
 	}
@@ -132,7 +132,7 @@ func TestAllScriptsParse(t *testing.T) {
 		o Options
 		f Facts
 	}{
-		{Options{Mode: ModeLogin}, Facts{LoginUser: "safeer", Access: AccessNone}},
+		{Options{Mode: ModeLogin}, Facts{LoginUser: "deployer", Access: AccessNone}},
 		{Options{Mode: ModeLogin, KeyAuth: true}, Facts{LoginUser: "ops", Access: AccessSudo, AdminReady: true}},
 		{Options{Mode: ModeCreate, DeployUser: "deploy", KeyAuth: true}, Facts{LoginUser: "root", Access: AccessRoot, AdminReady: true}},
 	}

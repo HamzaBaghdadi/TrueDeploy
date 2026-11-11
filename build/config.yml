@@ -9,7 +9,7 @@ info:
   productName: "TrueDeploy" # The name of the application
   productIdentifier: "com.truedeploy.app" # The unique product identifier
   description: "Server setup and Docker deployments over SSH" # The application description
-  copyright: "(c) 2026 TrueDeploy" # Copyright text
+  copyright: "(c) 2026 Hamza Baghdadi and contributors · Apache-2.0" # Copyright text
   comments: "TrueDeploy" # Comments
   version: "0.1.0" # The application version
   # cfBundleIconName: "appicon" # The macOS icon name in Assets.car icon bundles (optional)

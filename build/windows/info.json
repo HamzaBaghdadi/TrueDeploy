@@ -9,7 +9,7 @@
 			"ProductVersion": "0.1.0",
 			"CompanyName": "TrueDeploy",
 			"FileDescription": "Server setup and Docker deployments over SSH",
-			"LegalCopyright": "(c) 2026 TrueDeploy",
+			"LegalCopyright": "(c) 2026 Hamza Baghdadi and contributors · Apache-2.0",
 			"ProductName": "TrueDeploy",
 			"Comments": "TrueDeploy"
 		}

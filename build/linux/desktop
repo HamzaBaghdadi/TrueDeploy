@@ -3,11 +3,11 @@ Version=1.0
 Name=TrueDeploy
 Comment=Server setup and Docker deployments over SSH
 # The Exec line includes %u to pass the URL to the application
-Exec=/usr/local/bin/truedeploy.exe %u
+Exec=/usr/local/bin/truedeploy %u
 Terminal=false
 Type=Application
-Icon=truedeploy.exe
+Icon=truedeploy
 Categories=Utility;
-StartupWMClass=truedeploy.exe
+StartupWMClass=truedeploy
 
  

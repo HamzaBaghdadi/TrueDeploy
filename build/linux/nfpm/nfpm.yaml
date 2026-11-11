@@ -3,26 +3,26 @@
 #
 # The lines below are called `modelines`. See `:help modeline`
 
-name: "truedeploy.exe"
+name: "truedeploy"
 arch: ${GOARCH}
 platform: "linux"
 version: "0.1.0"
 section: "default"
 priority: "extra"
-maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+maintainer: "Hamza Baghdadi <HamzaBaghdadi@users.noreply.github.com>"
 description: "Server setup and Docker deployments over SSH"
 vendor: "TrueDeploy"
-homepage: "https://wails.io"
-license: "MIT"
+homepage: "https://github.com/HamzaBaghdadi/TrueDeploy"
+license: "Apache-2.0"
 release: "1"
 
 contents:
-  - src: "./bin/truedeploy.exe"
-    dst: "/usr/local/bin/truedeploy.exe"
+  - src: "./bin/truedeploy"
+    dst: "/usr/local/bin/truedeploy"
   - src: "./build/appicon.png"
-    dst: "/usr/share/icons/hicolor/128x128/apps/truedeploy.exe.png"
-  - src: "./build/linux/truedeploy.exe.desktop"
-    dst: "/usr/share/applications/truedeploy.exe.desktop"
+    dst: "/usr/share/icons/hicolor/128x128/apps/truedeploy.png"
+  - src: "./build/linux/truedeploy.desktop"
+    dst: "/usr/share/applications/truedeploy.desktop"
 
 # Default dependencies for the GTK4 + WebKitGTK 6.0 stack (Ubuntu 24.04+ / Debian 13+)
 depends:

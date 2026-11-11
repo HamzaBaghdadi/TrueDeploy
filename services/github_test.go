@@ -21,7 +21,7 @@ func TestGitHubConnectStoresTokenEncrypted(t *testing.T) {
 			w.Write([]byte(`{"message":"Bad credentials"}`))
 			return
 		}
-		w.Write([]byte(`{"login":"safeer","name":"Safeer"}`))
+		w.Write([]byte(`{"login":"deployer","name":"Deployer"}`))
 	}))
 	defer api.Close()
 
@@ -36,7 +36,7 @@ func TestGitHubConnectStoresTokenEncrypted(t *testing.T) {
 	}
 
 	s, err := svc.Connect("  ghp_good \n")
-	if err != nil || !s.Connected || s.Login != "safeer" {
+	if err != nil || !s.Connected || s.Login != "deployer" {
 		t.Fatalf("Connect = %+v, %v", s, err)
 	}
 	dir := os.Getenv("AppData")

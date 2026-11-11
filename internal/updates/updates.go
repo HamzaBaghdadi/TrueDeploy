@@ -1,5 +1,5 @@
 // Package updates checks GitHub Releases for a newer TrueDeploy.
-// It never downloads or installs anything: it only reports what's available.
+// selfupdate.go downloads, verifies and installs them.
 package updates
 
 import (
@@ -27,6 +27,14 @@ type Release struct {
 	PageURL   string    `json:"pageUrl"`
 	Installer string    `json:"installer,omitempty"` // direct download of the Windows installer, if attached
 	Published time.Time `json:"published"`
+	Assets    []Asset   `json:"assets"`
+}
+
+// Asset is one downloadable file of a release.
+type Asset struct {
+	Name string `json:"name"`
+	URL  string `json:"url"`
+	Size int64  `json:"size"`
 }
 
 // ErrNoReleases means the repository has no published release yet (or isn't public).
@@ -63,6 +71,7 @@ func Latest(ctx context.Context, client *http.Client) (Release, error) {
 		Assets      []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
+			Size int64  `json:"size"`
 		} `json:"assets"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&r); err != nil {
@@ -74,8 +83,12 @@ func Latest(ctx context.Context, client *http.Client) (Release, error) {
 	}
 	out := Release{Version: v, Name: r.Name, Notes: r.Body, PageURL: r.HTMLURL, Published: r.PublishedAt}
 	for _, a := range r.Assets {
+		if !strings.HasPrefix(a.URL, "https://github.com/") {
+			continue // only files GitHub serves for this release
+		}
+		out.Assets = append(out.Assets, Asset{Name: a.Name, URL: a.URL, Size: a.Size})
 		n := strings.ToLower(a.Name)
-		if strings.HasSuffix(n, ".exe") && strings.Contains(n, "installer") && strings.HasPrefix(a.URL, "https://github.com/") {
+		if strings.HasSuffix(n, ".exe") && (strings.Contains(n, "installer") || strings.HasSuffix(n, "-setup.exe")) {
 			out.Installer = a.URL
 		}
 	}

@@ -1,0 +1,58 @@
+# Checks every push to main and every pull request: Go tests, the frontend
+# type check, lint and build, and a full app build on Linux.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Test and build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+      - name: Go formatting
+        run: |
+          UNFORMATTED=$(gofmt -l $(git ls-files '*.go'))
+          if [ -n "$UNFORMATTED" ]; then echo "::error::Run gofmt on: $UNFORMATTED"; exit 1; fi
+      - name: Generate bindings
+        run: |
+          wails3 generate bindings -clean=true -ts -i
+          go run ./build/tools/fixbindings frontend/bindings
+      - name: Frontend
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc --noEmit
+          pnpm lint
+          pnpm build
+      - name: Go vet
+        run: go vet ./...
+      - name: Go tests
+        run: go test ./... -count=1
+      - name: Build the app
+        run: wails3 build

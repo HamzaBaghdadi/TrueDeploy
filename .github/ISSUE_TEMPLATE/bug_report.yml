@@ -1,0 +1,48 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting! Before posting logs, please remove passwords, tokens, and any IP addresses or domains you don't want public.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Add a server running Ubuntu 24.04
+        2. Create a Compose project from …
+        3. Click Deploy
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output or error message
+      description: The deploy log or error shown in the app, if any.
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: TrueDeploy version
+      description: Settings → About
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Your computer
+      options: [Windows, macOS, Linux]
+    validations:
+      required: true
+  - type: input
+    id: server
+    attributes:
+      label: Server OS and Docker setup
+      placeholder: Ubuntu 24.04, rootless Docker, no sudo

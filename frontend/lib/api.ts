@@ -282,6 +282,7 @@ export const api = {
   previewImport: (path: string, passphrase: string) => call(AppService.PreviewImport(path, passphrase)).then(required),
   importData: (path: string, passphrase: string, replace: boolean) => call(AppService.ImportData(path, passphrase, replace)),
   checkForUpdate: () => call(AppService.CheckForUpdate()),
+  installUpdate: () => call(AppService.InstallUpdate()),
 
   // Opens in the system browser, not inside the app window.
   openURL: (url: string) => Browser.OpenURL(url),

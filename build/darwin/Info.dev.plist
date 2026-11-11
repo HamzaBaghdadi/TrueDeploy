@@ -6,7 +6,7 @@
         <key>CFBundleName</key>
             <string>TrueDeploy</string>
         <key>CFBundleExecutable</key>
-            <string>truedeploy.exe</string>
+            <string>truedeploy</string>
         <key>CFBundleIdentifier</key>
             <string>com.truedeploy.app</string>
         <key>CFBundleVersion</key>
@@ -24,7 +24,7 @@
         <key>NSHighResolutionCapable</key>
             <string>true</string>
         <key>NSHumanReadableCopyright</key>
-            <string>(c) 2026 TrueDeploy</string>
+            <string>(c) 2026 Hamza Baghdadi and contributors · Apache-2.0</string>
         <key>NSAppTransportSecurity</key>
         <dict>
             <key>NSAllowsLocalNetworking</key>

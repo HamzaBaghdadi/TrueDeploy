@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
@@ -36,6 +38,13 @@ type UpdateStatus struct {
 	CheckedAt time.Time        `json:"checkedAt,omitempty"`
 	Checking  bool             `json:"checking"`
 	Error     string           `json:"error,omitempty"`
+	// CanInstall: this copy can update itself (else InstallNote says why and
+	// the person downloads it). Phase: "", "downloading", "ready" or
+	// "installing"; Progress is 0..1 while downloading.
+	CanInstall  bool    `json:"canInstall"`
+	InstallNote string  `json:"installNote,omitempty"`
+	Phase       string  `json:"phase,omitempty"`
+	Progress    float64 `json:"progress,omitempty"`
 }
 
 func init() {
@@ -50,6 +59,12 @@ type AppService struct {
 	mu       sync.Mutex
 	status   UpdateStatus
 	notified string // version we already showed a notification for
+
+	// Self-update: the plan for the latest release, and the verified download.
+	plan       updates.Plan
+	downloaded string
+	applied    bool
+	preparing  bool
 }
 
 func NewAppService(st *store.Store, notifier *notifications.NotificationService) *AppService {
@@ -118,7 +133,18 @@ func (s *AppService) check(ctx context.Context) UpdateStatus {
 		st.Latest = &rel
 		st.Available = updates.Newer(rel.Version, Version)
 	}
+	if st.Available {
+		plan, why := updates.PlanFor(*st.Latest, currentTarget())
+		st.CanInstall, st.InstallNote = plan.Method != "", why
+		// Keep a download already done (or running) for the same version.
+		if s.plan.Asset.URL == plan.Asset.URL {
+			st.Phase, st.Progress = s.status.Phase, s.status.Progress
+		} else {
+			s.plan, s.downloaded = plan, ""
+		}
+	}
 	s.status = st
+	download := st.Available && st.CanInstall && st.Phase == "" && !s.preparing
 	notify := st.Available && s.notified != st.Latest.Version
 	if notify {
 		s.notified = st.Latest.Version
@@ -126,13 +152,131 @@ func (s *AppService) check(ctx context.Context) UpdateStatus {
 	s.mu.Unlock()
 	s.emit()
 
+	if download {
+		// Fetch it in the background, so updating is just a restart.
+		go func() { _ = s.prepare(context.Background()) }()
+	}
 	if notify && s.notifier != nil {
+		body := "Open Settings → About to download it. You're on " + Version + "."
+		if st.CanInstall {
+			body = "It's downloading in the background. Restart TrueDeploy to update, or it installs when you quit."
+		}
 		_ = s.notifier.SendNotification(notifications.NotificationOptions{
-			ID: "td-update-" + st.Latest.Version, Title: "TrueDeploy " + st.Latest.Version + " is available",
-			Body: "Open Settings → About to download it. You're on " + Version + ".",
+			ID: "td-update-" + st.Latest.Version, Title: "TrueDeploy " + st.Latest.Version + " is available", Body: body,
 		})
 	}
 	return st
+}
+
+// currentTarget describes this running copy, for picking how to update it.
+func currentTarget() updates.Target {
+	exe, _ := os.Executable()
+	if r, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = r
+	}
+	return updates.Target{GOOS: runtime.GOOS, Exe: exe, AppImage: os.Getenv("APPIMAGE"), LocalAppData: os.Getenv("LOCALAPPDATA")}
+}
+
+func updateDir(version string) string {
+	return filepath.Join(os.TempDir(), "truedeploy-update", version)
+}
+
+// prepare downloads and verifies the update (once).
+func (s *AppService) prepare(ctx context.Context) error {
+	s.mu.Lock()
+	if s.preparing {
+		s.mu.Unlock()
+		return errors.New("the update is already downloading")
+	}
+	if s.downloaded != "" {
+		s.mu.Unlock()
+		return nil
+	}
+	if !s.status.Available || !s.status.CanInstall || s.status.Latest == nil {
+		s.mu.Unlock()
+		return errors.New("there's no update to install")
+	}
+	s.preparing = true
+	rel, plan := *s.status.Latest, s.plan
+	s.status.Phase, s.status.Progress, s.status.Error = "downloading", 0, ""
+	s.mu.Unlock()
+	s.emit()
+
+	client := &http.Client{Timeout: 30 * time.Minute}
+	lastPct := -1
+	path, err := updates.Download(ctx, client, rel, plan, updateDir(rel.Version), func(done, total int64) {
+		if total <= 0 {
+			return
+		}
+		pct := int(done * 100 / total)
+		if pct == lastPct {
+			return
+		}
+		lastPct = pct
+		s.mu.Lock()
+		s.status.Progress = float64(done) / float64(total)
+		s.mu.Unlock()
+		s.emit()
+	})
+
+	s.mu.Lock()
+	s.preparing = false
+	if err != nil {
+		s.status.Phase, s.status.Error = "", "Couldn't download the update: "+err.Error()
+	} else {
+		s.downloaded = path
+		s.status.Phase, s.status.Progress = "ready", 1
+	}
+	s.mu.Unlock()
+	s.emit()
+	return err
+}
+
+// apply starts the helper that installs the downloaded update after the app
+// exits (and starts the new version when relaunch is set).
+func (s *AppService) apply(relaunch bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.applied || s.downloaded == "" {
+		return nil
+	}
+	script := updates.Script(s.plan, s.downloaded, os.Getpid(), relaunch)
+	if script == "" {
+		return errors.New("this copy of TrueDeploy can't update itself")
+	}
+	if err := updates.Launch(script, filepath.Dir(s.downloaded)); err != nil {
+		return err
+	}
+	s.applied = true
+	return nil
+}
+
+// InstallUpdate downloads the update if needed, then restarts into it.
+func (s *AppService) InstallUpdate() error {
+	if err := s.prepare(context.Background()); err != nil {
+		return err
+	}
+	if err := s.apply(true); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.status.Phase = "installing"
+	s.mu.Unlock()
+	s.emit()
+	go func() {
+		time.Sleep(400 * time.Millisecond) // let the UI show "Restarting…"
+		if app := application.Get(); app != nil {
+			app.Quit()
+		}
+	}()
+	return nil
+}
+
+// ServiceShutdown installs a downloaded update as the app quits, so the next
+// launch is the new version.
+func (s *AppService) ServiceShutdown() error {
+	_ = s.apply(false)
+	return nil
 }
 
 func (s *AppService) emit() {

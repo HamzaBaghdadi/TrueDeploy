@@ -1,69 +1,208 @@
-# Builds TrueDeploy for Windows and publishes a GitHub Release when a version
-# tag is pushed:
+# Builds TrueDeploy for Windows, macOS and Linux and publishes a GitHub
+# Release when a version tag is pushed:
 #
-#   1. Bump the version in services/app.go, build/config.yml and
-#      build/windows/info.json (a test fails if they disagree).
-#   2. git tag v0.2.0 && git push origin v0.2.0
+#   scripts/bump-version.sh 0.2.0     # updates every version field
+#   git commit -am "Release 0.2.0" && git tag v0.2.0 && git push origin main v0.2.0
 #
-# The release gets the installer and the bare .exe. Running apps find it
-# through the in-app update check (GitHub's "latest release").
+# Tags with a suffix (v0.2.0-rc.1) become pre-releases, which running apps
+# don't update to. "Run workflow" on the Actions tab builds everything
+# without publishing, to check a release before tagging it.
 name: Release
 
 on:
   push:
     tags: ["v*.*.*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+env:
+  WAILS_VERSION: v3.1.0
+
 jobs:
+  version:
+    name: Check version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          CODE=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' services/app.go)
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME#v}" != "$CODE" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match services.Version (${CODE}). Run scripts/bump-version.sh, commit, then tag again."
+            exit 1
+          fi
+          V="${GITHUB_REF_NAME#v}"
+          [ "${GITHUB_REF_TYPE}" = "tag" ] || V="$CODE"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
   windows:
+    name: Windows
+    needs: version
     runs-on: windows-latest
     defaults:
       run:
         shell: bash
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check the tag matches the app version
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          CODE=$(sed -n 's/^const Version = "\(.*\)"$/\1/p' services/app.go)
-          if [ "$TAG" != "$CODE" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME doesn't match services.Version ($CODE). Bump the version, then tag again."
-            exit 1
-          fi
-
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json
-
       - name: Install Wails and NSIS
         run: |
-          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.1.0
+          go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
           choco install nsis --no-progress -y
           echo "C:\\Program Files (x86)\\NSIS" >> "$GITHUB_PATH"
-
       - name: Test
         run: go test ./... -count=1
-
+      # Per-user install (no admin prompt), so the app can update itself silently.
       - name: Build installer
-        run: wails3 package
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
+        run: wails3 task windows:package INSTALL_SCOPE=user
+      - name: Collect files
         run: |
-          INSTALLER=$(ls bin/*-installer.exe)
+          mkdir dist
+          cp bin/truedeploy-amd64-installer.exe "dist/TrueDeploy-${VERSION}-windows-amd64-setup.exe"
+          cp bin/truedeploy.exe "dist/TrueDeploy-${VERSION}-windows-amd64-portable.exe"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS
+    needs: version
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+      - name: Set the bundle version
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION%%-*}" build/darwin/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION%%-*}" build/darwin/Info.plist
+      - name: Build universal app (Apple silicon + Intel)
+        run: wails3 task darwin:package:universal
+      - name: Make the .dmg and .zip
+        run: |
+          mkdir -p dist dmg
+          rm -rf bin/TrueDeploy.app
+          mv bin/truedeploy.app bin/TrueDeploy.app
+          # Not notarized: an ad-hoc signature lets it run after "Open" in Finder.
+          codesign --force --deep --sign - bin/TrueDeploy.app
+          ditto -c -k --sequesterRsrc --keepParent bin/TrueDeploy.app "dist/TrueDeploy-${VERSION}-macos-universal.zip"
+          cp -R bin/TrueDeploy.app dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname TrueDeploy -srcfolder dmg -ov -format UDZO "dist/TrueDeploy-${VERSION}-macos-universal.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/*
+          if-no-files-found: error
+
+  linux:
+    name: Linux
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      # linuxdeploy is itself an AppImage; CI has no FUSE.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev file
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v3/cmd/wails3@${WAILS_VERSION}
+      - name: Set the package version
+        run: |
+          sed -i "s/^version: .*/version: \"${VERSION%%-*}\"/" build/linux/nfpm/nfpm.yaml
+      - name: Test
+        run: go test ./... -count=1
+      - name: Build packages
+        run: wails3 task linux:package
+      - name: Collect files
+        run: |
+          mkdir dist
+          ls -la bin
+          for f in bin/*.AppImage; do cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.AppImage"; done
+          for f in bin/*.deb; do cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.deb"; done
+          for f in bin/*.rpm; do cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.rpm"; done
+          for f in bin/*.pkg.tar.zst; do [ -e "$f" ] && cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.pkg.tar.zst"; done
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs: [version, windows, macos, linux]
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Release notes
+        run: |
+          cat > notes.md <<EOF
+          ## Download
+
+          | | |
+          |---|---|
+          | **Windows** 10/11 | [Installer](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-windows-amd64-setup.exe) · [Portable .exe](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-windows-amd64-portable.exe) |
+          | **macOS** 12+ (Apple silicon and Intel) | [.dmg](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-macos-universal.dmg) |
+          | **Linux** x64 | [AppImage](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-linux-amd64.AppImage) · [.deb](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-linux-amd64.deb) · [.rpm](https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/TrueDeploy-${VERSION}-linux-amd64.rpm) |
+
+          Already installed? TrueDeploy offers this update in the app (Settings → About).
+          The builds aren't code-signed yet: see the [README](https://github.com/${GITHUB_REPOSITORY}#install) for the one-time "open anyway" step.
+
+          EOF
+      - name: Publish
+        run: |
           PRERELEASE=""
           case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" "$INSTALLER" bin/truedeploy.exe \
-            --title "TrueDeploy ${GITHUB_REF_NAME#v}" --generate-notes $PRERELEASE
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "TrueDeploy ${VERSION}" --notes-file notes.md --generate-notes $PRERELEASE

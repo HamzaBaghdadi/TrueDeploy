@@ -139,8 +139,8 @@ func TestWorkflowAndSecrets(t *testing.T) {
 			t.Errorf("workflow missing %q:\n%s", want, wf)
 		}
 	}
-	sec := Secrets("my-shop", "safeer", "vps.example.com", 2222, "PEM", []string{"ssh-ed25519 AAAAhost"})
-	if sec["TRUEDEPLOY_MY_SHOP_TARGET"] != "safeer@vps.example.com" || sec["TRUEDEPLOY_MY_SHOP_PORT"] != "2222" {
+	sec := Secrets("my-shop", "deployer", "vps.example.com", 2222, "PEM", []string{"ssh-ed25519 AAAAhost"})
+	if sec["TRUEDEPLOY_MY_SHOP_TARGET"] != "deployer@vps.example.com" || sec["TRUEDEPLOY_MY_SHOP_PORT"] != "2222" {
 		t.Fatalf("secrets = %v", sec)
 	}
 	if sec["TRUEDEPLOY_MY_SHOP_KNOWN_HOSTS"] != "[vps.example.com]:2222 ssh-ed25519 AAAAhost\n" {

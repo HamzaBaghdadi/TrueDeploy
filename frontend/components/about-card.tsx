@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Kbd } from "@/components/ui/kbd";
 import { timeAgo } from "@/lib/format";
-import { downloadUpdate, useUpdateStatus } from "@/lib/updates";
+import { updateAction, useUpdateStatus } from "@/lib/updates";
 
 export function AboutCard() {
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -64,6 +64,8 @@ function Updates() {
   const checking = !!s?.checking;
   const checked = s?.checkedAt && !s.checkedAt.startsWith("0001");
   const latest = s?.latest;
+  const [installError, setInstallError] = useState<string | null>(null);
+  const upd = updateAction(s, setInstallError);
 
   return (
     <div
@@ -95,6 +97,8 @@ function Updates() {
                   ? `Checked ${timeAgo(s!.checkedAt!)}`
                   : "Not checked yet this session."}
           </div>
+          {upd?.note && <div className="text-[12px] text-muted-foreground">{upd.note}</div>}
+          {installError && <div className="text-[12px] text-destructive">{installError}</div>}
         </div>
         <div className="flex gap-2">
           {s?.available && latest?.pageUrl && (
@@ -102,9 +106,9 @@ function Updates() {
               What&apos;s new <ExternalLink />
             </Button>
           )}
-          {s?.available ? (
-            <Button size="sm" onClick={() => downloadUpdate(s)}>
-              <CircleArrowUp /> {latest?.installer ? "Download installer" : "Download"}
+          {upd ? (
+            <Button size="sm" onClick={upd.run} disabled={upd.disabled}>
+              {upd.busy ? <Loader2 className="animate-spin" /> : <CircleArrowUp />} {upd.label}
             </Button>
           ) : (
             <Button variant="outline" size="sm" onClick={() => void api.checkForUpdate()} disabled={checking}>

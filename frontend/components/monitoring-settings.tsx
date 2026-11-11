@@ -98,8 +98,8 @@ export function MonitoringSettings() {
             <Separator />
             <Row
               id="updates"
-              title="Check for updates"
-              body="Once a day, asks GitHub whether a newer TrueDeploy is out. Nothing is downloaded until you choose to."
+              title="Keep TrueDeploy up to date"
+              body="Once a day, checks GitHub for a new version and downloads it in the background (verified against its checksums). It installs when you restart or quit the app."
               checked={!s.skipUpdateCheck}
               onChange={(v) => void save({ ...s, skipUpdateCheck: !v })}
             />

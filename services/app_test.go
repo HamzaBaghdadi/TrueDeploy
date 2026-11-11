@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"truedeploy/internal/updates"
@@ -36,12 +37,14 @@ func TestVersionIsConsistent(t *testing.T) {
 	if err := json.Unmarshal(raw, &info); err != nil {
 		t.Fatal(err)
 	}
-	if info.Fixed.File != Version || info.Fixed.Product != Version {
-		t.Errorf("info.json fixed versions %+v, want %s", info.Fixed, Version)
+	// Windows version fields hold x.y.z only, so a pre-release (0.2.0-rc.1) records 0.2.0.
+	core, _, _ := strings.Cut(Version, "-")
+	if info.Fixed.File != core || info.Fixed.Product != core {
+		t.Errorf("info.json fixed versions %+v, want %s", info.Fixed, core)
 	}
 	for lang, kv := range info.Info {
-		if kv["FileVersion"] != Version || kv["ProductVersion"] != Version {
-			t.Errorf("info.json %s versions %v, want %s", lang, kv, Version)
+		if kv["FileVersion"] != core || kv["ProductVersion"] != core {
+			t.Errorf("info.json %s versions %v, want %s", lang, kv, core)
 		}
 	}
 }

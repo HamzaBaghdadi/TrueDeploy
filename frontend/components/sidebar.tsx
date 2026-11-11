@@ -4,6 +4,7 @@ import {
   Bell,
   Braces,
   CircleArrowUp,
+  Loader2,
   Database,
   FolderGit2,
   House,
@@ -22,7 +23,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useMonitorStatus } from "@/lib/alerts";
-import { downloadUpdate, useUpdateStatus } from "@/lib/updates";
+import { updateAction, useUpdateStatus } from "@/lib/updates";
 import { openCommandPalette } from "@/components/command-palette";
 import { Kbd } from "@/components/ui/kbd";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function Sidebar() {
   const path = usePathname();
   const monitor = useMonitorStatus();
   const update = useUpdateStatus();
+  const upd = updateAction(update);
   const [version, setVersion] = useState("");
   useEffect(() => {
     api.appInfo().then((i) => setVersion(i.version), () => {});
@@ -100,10 +102,10 @@ export function Sidebar() {
         ))}
       </nav>
       <div className="mt-auto space-y-2 px-3 py-4">
-        {update?.available && update.latest && (
-          <Button size="sm" className="w-full justify-start" onClick={() => downloadUpdate(update)}>
-            <CircleArrowUp />
-            Update to v{update.latest.version}
+        {upd && (
+          <Button size="sm" className="w-full justify-start" onClick={upd.run} disabled={upd.disabled}>
+            {upd.busy ? <Loader2 className="animate-spin" /> : <CircleArrowUp />}
+            <span className="truncate">{upd.label}</span>
           </Button>
         )}
         <div className="px-2 font-mono text-[11px] text-muted-foreground">{version && `v${version}`}</div>
