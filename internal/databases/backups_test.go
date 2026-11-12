@@ -1,9 +1,12 @@
 package databases
 
 import (
+	"compress/gzip"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +25,7 @@ func bashPath(p string) string {
 func fakeServer(t *testing.T) (run func(string) (string, error), home, dir string) {
 	t.Helper()
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "command -v gzip && command -v stat").Run() != nil {
@@ -30,7 +33,9 @@ func fakeServer(t *testing.T) (run func(string) (string, error), home, dir strin
 	}
 	dir = t.TempDir()
 	home = filepath.Join(dir, "home")
-	bin := filepath.Join(dir, "bin")
+	// The fakes live in $HOME/bin: scripts search it before /usr/bin, so they
+	// win over a real docker or crontab (as on CI runners).
+	bin := filepath.Join(dir, "home", "bin")
 	os.MkdirAll(home, 0o755)
 	os.MkdirAll(bin, 0o755)
 	b := bashPath(dir)
@@ -144,7 +149,7 @@ func TestRestoreTakesSafetyBackupFirst(t *testing.T) {
 			name = filepath.Base(v)
 		}
 	}
-	original, _ := exec.Command(`C:\Program Files\Git\bin\bash.exe`, "-c", "gunzip -c "+bashPath(filepath.Join(home, "truedeploy", "backups", name))).Output()
+	original := gunzipFile(t, filepath.Join(home, "truedeploy", "backups", name))
 
 	r, err := RestoreScript(s, name)
 	if err != nil {
@@ -218,4 +223,23 @@ func TestOffsiteScheduleUploadsAndPrunes(t *testing.T) {
 	if strings.Index(s, "rcat") > strings.Index(s, "pruned $(basename") {
 		t.Error("upload should run before local pruning")
 	}
+}
+
+// gunzipFile reads a gzip file (in Go, so it works on any OS).
+func gunzipFile(t *testing.T, path string) []byte {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	zr, err := gzip.NewReader(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

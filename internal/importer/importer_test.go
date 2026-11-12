@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -19,7 +20,7 @@ func bashPath(p string) string {
 func findBash(t *testing.T) string {
 	t.Helper()
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "command -v git && command -v base64").Run() != nil {
@@ -47,7 +48,9 @@ func setup(t *testing.T) (run func(string) (string, error), dir, wd string) {
 	t.Helper()
 	bash := findBash(t)
 	dir = t.TempDir()
-	bin := filepath.Join(dir, "bin")
+	// The fakes live in $HOME/bin: scripts search it before /usr/bin, so they
+	// win over a real docker or crontab (as on CI runners).
+	bin := filepath.Join(dir, "home", "bin")
 	home := filepath.Join(dir, "home")
 	wd = filepath.Join(dir, "srv", "shop")
 	for _, d := range []string{bin, home, wd} {
@@ -86,8 +89,16 @@ func TestScanFindsProjectsAndDatabases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
-	// nginx isn't on the test machine: add a site the way the script prints it.
-	lines := append(strings.Split(out, "\n"),
+	// nginx sites, listening ports and host services depend on the machine
+	// running the test: drop the real ones and add a site the way the script
+	// prints it.
+	var lines []string
+	for _, l := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(l, "N\t") && !strings.HasPrefix(l, "L\t") && !strings.HasPrefix(l, "S\t") {
+			lines = append(lines, l)
+		}
+	}
+	lines = append(lines,
 		"N\t/etc/nginx/sites-enabled/shop\tshop.io www.shop.io _\thttp://127.0.0.1:8080 http://upstream_name",
 		"L\t80\tnginx", "S\tnginx")
 	sc := Parse(lines)

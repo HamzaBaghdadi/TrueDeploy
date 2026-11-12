@@ -61,8 +61,10 @@ func findAsset(rel Release, suffix string) (Asset, bool) {
 func PlanFor(rel Release, t Target) (Plan, string) {
 	switch t.GOOS {
 	case "windows":
-		installed := t.LocalAppData != "" && strings.HasPrefix(strings.ToLower(filepath.Clean(t.Exe)),
-			strings.ToLower(filepath.Join(t.LocalAppData, "Programs"))+string(filepath.Separator))
+		// Compared as text with one slash style, so this also works when
+		// tested on another OS.
+		norm := func(p string) string { return strings.ToLower(strings.TrimRight(strings.ReplaceAll(p, `\`, "/"), "/")) }
+		installed := t.LocalAppData != "" && strings.HasPrefix(norm(t.Exe), norm(t.LocalAppData)+"/programs/")
 		if installed {
 			if a, ok := findAsset(rel, "-windows-amd64-setup.exe"); ok {
 				return Plan{Method: WindowsSetup, Asset: a, Path: t.Exe}, ""

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func bashPath(p string) string {
 func findBash(t *testing.T) string {
 	t.Helper()
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "command -v tar && command -v gzip && command -v stat").Run() != nil {
@@ -59,7 +60,9 @@ func fakeServer(t *testing.T) (run func(string) (string, error), home, dir strin
 	bash := findBash(t)
 	dir = t.TempDir()
 	home = filepath.Join(dir, "home")
-	bin := filepath.Join(dir, "bin")
+	// The fakes live in $HOME/bin: scripts search it before /usr/bin, so they
+	// win over a real docker or crontab (as on CI runners).
+	bin := filepath.Join(dir, "home", "bin")
 	vols := filepath.Join(dir, "vols")
 	for _, d := range []string{home, bin, filepath.Join(vols, "shop_data"), filepath.Join(vols, "shop_db")} {
 		os.MkdirAll(d, 0o755)
@@ -148,7 +151,7 @@ esac
 
 func TestContainersRestartWhenBackupFails(t *testing.T) {
 	run, home, dir := fakeServer(t)
-	os.WriteFile(filepath.Join(dir, "bin", "docker"), []byte(strings.ReplaceAll(failingDocker, "DIR", bashPath(dir))), 0o755)
+	os.WriteFile(filepath.Join(dir, "home", "bin", "docker"), []byte(strings.ReplaceAll(failingDocker, "DIR", bashPath(dir))), 0o755)
 	s, _ := BackupScript("shop")
 	out, err := run(s)
 	if err == nil || !strings.Contains(out, "Backup failed") {

@@ -3,6 +3,7 @@ package databases
 import (
 	"net/url"
 	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -79,7 +80,7 @@ func TestPasswordNeverOnCommandLine(t *testing.T) {
 
 func TestScriptsParse(t *testing.T) {
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "true").Run() != nil {

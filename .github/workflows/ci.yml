@@ -47,9 +47,10 @@ jobs:
         working-directory: frontend
         run: |
           pnpm install --frozen-lockfile
-          pnpm exec tsc --noEmit
           pnpm lint
+          # Builds first: it generates Next.js's route types (LayoutProps…) the type check needs.
           pnpm build
+          pnpm exec tsc --noEmit
       - name: Go vet
         run: go vet ./...
       - name: Go tests

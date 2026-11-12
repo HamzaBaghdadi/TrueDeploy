@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -40,7 +41,7 @@ esac
 func setup(t *testing.T) (run func(string) (string, error), home, dir string) {
 	t.Helper()
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "true").Run() != nil {
@@ -48,7 +49,9 @@ func setup(t *testing.T) (run func(string) (string, error), home, dir string) {
 	}
 	dir = t.TempDir()
 	home = filepath.Join(dir, "home")
-	bin := filepath.Join(dir, "bin")
+	// The fakes live in $HOME/bin: scripts search it before /usr/bin, so they
+	// win over a real docker or crontab (as on CI runners).
+	bin := filepath.Join(dir, "home", "bin")
 	os.MkdirAll(home, 0o755)
 	os.MkdirAll(bin, 0o755)
 	os.WriteFile(filepath.Join(bin, "docker"), []byte(strings.ReplaceAll(fakeDocker, "DIR", bashPath(dir))), 0o755)

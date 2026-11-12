@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 func findBash(t *testing.T) string {
 	t.Helper()
 	candidates := []string{`C:\Program Files\Git\bin\bash.exe`}
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		candidates = append([]string{p}, candidates...)
 	}
 	for _, p := range candidates {

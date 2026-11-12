@@ -65,7 +65,8 @@ jobs:
           choco install nsis --no-progress -y
           echo "C:\\Program Files (x86)\\NSIS" >> "$GITHUB_PATH"
       - name: Test
-        run: go test ./... -count=1
+        # The app package embeds the built UI, so it is checked by the build step.
+        run: go test ./internal/... ./services/... -count=1
       # Per-user install (no admin prompt), so the app can update itself silently.
       - name: Build installer
         run: wails3 task windows:package INSTALL_SCOPE=user
@@ -151,7 +152,8 @@ jobs:
         run: |
           sed -i "s/^version: .*/version: \"${VERSION%%-*}\"/" build/linux/nfpm/nfpm.yaml
       - name: Test
-        run: go test ./... -count=1
+        # The app package embeds the built UI, so it is checked by the build step.
+        run: go test ./internal/... ./services/... -count=1
       - name: Build packages
         run: wails3 task linux:package
       - name: Collect files
