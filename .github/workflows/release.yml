@@ -75,7 +75,7 @@ jobs:
           mkdir dist
           cp bin/truedeploy-amd64-installer.exe "dist/TrueDeploy-${VERSION}-windows-amd64-setup.exe"
           cp bin/truedeploy.exe "dist/TrueDeploy-${VERSION}-windows-amd64-portable.exe"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows
           path: dist/*
@@ -119,7 +119,7 @@ jobs:
           cp -R stage/TrueDeploy.app dmg/
           ln -s /Applications dmg/Applications
           hdiutil create -volname TrueDeploy -srcfolder dmg -ov -format UDZO "dist/TrueDeploy-${VERSION}-macos-universal.dmg"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: macos
           path: dist/*
@@ -167,7 +167,7 @@ jobs:
           for f in bin/*.rpm; do cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.rpm"; done
           for f in bin/*.pkg.tar.zst; do [ -e "$f" ] && cp "$f" "dist/TrueDeploy-${VERSION}-linux-amd64.pkg.tar.zst"; done
           ls -la dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux
           path: dist/*
