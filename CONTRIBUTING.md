@@ -63,7 +63,7 @@ Remote work happens through **bash scripts sent over SSH**. They're built in Go 
 ```bash
 go vet ./...
 go test ./...
-cd frontend && pnpm exec tsc --noEmit && pnpm lint && pnpm build
+cd frontend && pnpm lint && pnpm build && pnpm exec tsc --noEmit
 ```
 
 On Windows, the script tests use Git Bash; they're skipped when no suitable bash is found. The same checks run on every pull request.

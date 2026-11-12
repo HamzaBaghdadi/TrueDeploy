@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -33,14 +34,16 @@ if [ "$1" = "-l" ]; then [ -f "$f" ] && cat "$f" || exit 1; else cat > "$f"; fi
 func setup(t *testing.T) (run func(string) (string, error), dir, home string) {
 	t.Helper()
 	bash := `C:\Program Files\Git\bin\bash.exe`
-	if p, err := exec.LookPath("bash"); err == nil && !strings.Contains(strings.ToLower(p), `\system32\`) {
+	if p, err := exec.LookPath("bash"); err == nil && runtime.GOOS != "windows" {
 		bash = p
 	}
 	if exec.Command(bash, "-c", "command -v base64 && command -v tail").Run() != nil {
 		t.Skip("no bash")
 	}
 	dir = t.TempDir()
-	bin := filepath.Join(dir, "bin")
+	// The fakes live in $HOME/bin: scripts search it before /usr/bin, so they
+	// win over a real docker or crontab (as on CI runners).
+	bin := filepath.Join(dir, "home", "bin")
 	home = filepath.Join(dir, "home")
 	os.MkdirAll(bin, 0o755)
 	os.MkdirAll(filepath.Join(home, "apps", "shop"), 0o755)
