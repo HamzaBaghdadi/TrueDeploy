@@ -108,13 +108,15 @@ jobs:
         run: wails3 task darwin:package:universal
       - name: Make the .dmg and .zip
         run: |
-          mkdir -p dist dmg
-          rm -rf bin/TrueDeploy.app
-          mv bin/truedeploy.app bin/TrueDeploy.app
+          # Copied to a separate folder under its display name: macOS paths are
+          # case-insensitive, so bin/TrueDeploy.app *is* bin/truedeploy.app.
+          mkdir -p dist dmg stage
+          ditto bin/truedeploy.app stage/TrueDeploy.app
           # Not notarized: an ad-hoc signature lets it run after "Open" in Finder.
-          codesign --force --deep --sign - bin/TrueDeploy.app
-          ditto -c -k --sequesterRsrc --keepParent bin/TrueDeploy.app "dist/TrueDeploy-${VERSION}-macos-universal.zip"
-          cp -R bin/TrueDeploy.app dmg/
+          codesign --force --deep --sign - stage/TrueDeploy.app
+          codesign --verify --deep --strict stage/TrueDeploy.app
+          ditto -c -k --sequesterRsrc --keepParent stage/TrueDeploy.app "dist/TrueDeploy-${VERSION}-macos-universal.zip"
+          cp -R stage/TrueDeploy.app dmg/
           ln -s /Applications dmg/Applications
           hdiutil create -volname TrueDeploy -srcfolder dmg -ov -format UDZO "dist/TrueDeploy-${VERSION}-macos-universal.dmg"
       - uses: actions/upload-artifact@v4
